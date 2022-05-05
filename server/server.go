@@ -14,12 +14,12 @@ limitations under the License.
 package server
 
 import (
-	"github.com/thetirefire/badidea/apiserver"
-	"github.com/thetirefire/badidea/etcd"
+	"github.com/clyang82/hohapiserver/apiserver"
+	"github.com/clyang82/hohapiserver/etcd"
 )
 
-// RunBadIdeaServer starts a new BadIdeaServer.
-func RunBadIdeaServer(stopCh <-chan struct{}) error {
+// RunHoHApiServerServer starts a new HoHApiServerServer.
+func RunHoHApiServerServer(stopCh <-chan struct{}) error {
 	err := etcd.RunEtcdServer(stopCh)
 	if err != nil {
 		return err

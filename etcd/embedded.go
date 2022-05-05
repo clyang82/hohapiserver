@@ -18,14 +18,14 @@ import (
 	"net/url"
 	"time"
 
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 	"k8s.io/klog"
 )
 
-// RunBadIdeaServer starts a new BadIdeaServer.
+// RunHoHApiServerServer starts a new HoHApiServerServer.
 func RunEtcdServer(stopCh <-chan struct{}) error {
-	embed.DefaultInitialAdvertisePeerURLs = "unix://etcd-socket:2380"
-	embed.DefaultAdvertiseClientURLs = "unix://etcd-socket:2379"
+	embed.DefaultInitialAdvertisePeerURLs = "https://localhost:2380"
+	embed.DefaultAdvertiseClientURLs = "https://localhost:2379"
 
 	peerURL, err := url.Parse(embed.DefaultInitialAdvertisePeerURLs)
 	if err != nil {

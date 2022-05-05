@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/thetirefire/badidea/controllers/crdregistration"
+	"github.com/clyang82/hohapiserver/controllers/crdregistration"
 	apiextensionsapiserver "k8s.io/apiextensions-apiserver/pkg/apiserver"
 	apiextensionsinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apiextensionsopenapi "k8s.io/apiextensions-apiserver/pkg/generated/openapi"
@@ -89,7 +89,7 @@ func CreateAggregatorConfig(sharedConfig genericapiserver.Config, sharedEtcdOpti
 	}
 
 	genericConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(getOpenAPIConfig, openapinamer.NewDefinitionNamer(apiextensionsapiserver.Scheme, aggregatorscheme.Scheme))
-	genericConfig.OpenAPIConfig.Info.Title = "BadIdea"
+	genericConfig.OpenAPIConfig.Info.Title = "HoHApiServer"
 	genericConfig.OpenAPIConfig.Info.Version = "0.1"
 	genericConfig.LongRunningFunc = filters.BasicLongRunningRequestCheck(
 		sets.NewString("watch"),

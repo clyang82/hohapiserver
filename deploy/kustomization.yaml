@@ -1,0 +1,5 @@
+resources:
+- ./service_account.yaml
+- ./hoh_apiserver_clusterrole_binding.yaml
+- ./hoh_apiserver_clusterrole.yaml
+- ./deployment.yaml

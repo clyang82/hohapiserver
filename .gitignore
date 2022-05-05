@@ -25,3 +25,4 @@ etcd-socket*
 
 # binary builds
 bin/
+vendor

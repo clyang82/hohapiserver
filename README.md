@@ -1,10 +1,10 @@
 <p>
-<a href="https://godoc.org/github.com/thetirefire/badidea"><img src="https://godoc.org/github.com/thetirefire/badidea?status.svg"></a>
-<a href="https://pkg.go.dev/thetirefire/badidea"><img src="https://pkg.go.dev/badge/thetirefire/badidea" alt="PkgGoDev"></a>
-<a href="https://goreportcard.com/report/github.com/thetirefire/badidea"><img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/thetirefire/badidea" /></a>
+<a href="https://godoc.org/github.com/clyang82/hohapiserver"><img src="https://godoc.org/github.com/clyang82/hohapiserver?status.svg"></a>
+<a href="https://pkg.go.dev/thetirefire/hohapiserver"><img src="https://pkg.go.dev/badge/thetirefire/hohapiserver" alt="PkgGoDev"></a>
+<a href="https://goreportcard.com/report/github.com/clyang82/hohapiserver"><img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/clyang82/hohapiserver" /></a>
 </p>
 
-# badidea
+# hohapiserver
 
 Minimal embeddable Kubernetes-style apiserver that supports CustomResourceDefitions
 
@@ -20,16 +20,16 @@ Minimal embeddable Kubernetes-style apiserver that supports CustomResourceDefiti
 
 - Go v1.15+
 
-## Build the badidea server
+## Build the hohapiserver server
 
 ```sh
-make badidea
+make hohapiserver
 ```
 
-## Start the badidea server
+## Start the hohapiserver server
 
 ```sh
-bin/badidea
+bin/hohapiserver
 ```
 
 ## Do the thing

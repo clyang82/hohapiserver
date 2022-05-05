@@ -14,8 +14,8 @@ limitations under the License.
 package cmd
 
 import (
+	"github.com/clyang82/hohapiserver/server"
 	"github.com/spf13/cobra"
-	"github.com/thetirefire/badidea/server"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/component-base/logs"
 	"k8s.io/klog"
@@ -23,8 +23,8 @@ import (
 
 func NewRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:     "badidea",
-		Short:   "badidea",
+		Use:     "hohapiserver",
+		Short:   "hohapiserver",
 		Version: "0.1",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logs.InitLogs()
@@ -37,7 +37,7 @@ func NewRootCommand() *cobra.Command {
 
 			stopCh := genericapiserver.SetupSignalHandler()
 
-			if err := server.RunBadIdeaServer(stopCh); err != nil {
+			if err := server.RunHoHApiServerServer(stopCh); err != nil {
 				klog.Fatal(err)
 			}
 

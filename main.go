@@ -16,7 +16,7 @@ package main
 import (
 	"os"
 
-	"github.com/thetirefire/badidea/cmd"
+	"github.com/clyang82/hohapiserver/cmd"
 )
 
 func main() {
