@@ -41,6 +41,8 @@ func RunEtcdServer(stopCh <-chan struct{}) error {
 	cfg.Dir = "default.etcd"
 	cfg.LCUrls = []url.URL{*clientURL}
 	cfg.LPUrls = []url.URL{*peerURL}
+	cfg.ClientTLSInfo.InsecureSkipVerify = true
+	cfg.PeerTLSInfo.InsecureSkipVerify = true
 
 	e, err := embed.StartEtcd(cfg)
 	if err != nil {

@@ -14,12 +14,10 @@ spec:
       labels:
         app: hub-of-hubs-apiserver
     spec:
-      serviceAccountName: hub-of-hubs-apiserver-sa
+      serviceAccountName: hoh-apiserver-sa
       containers:
       - args:
-          - "/hub-of-hubs-apiserver"
-          - "controller"
-          - "--v=2"
+          - "/hohapiserver"
         env:
         name: hub-of-hubs-apiserver
         image: quay.io/clyang82/hub-of-hubs-apiserver:latest
