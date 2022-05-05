@@ -9,5 +9,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 
 FROM gcr.io/distroless/base:debug
 WORKDIR /
+
+RUN mkdir /etc/etcd-server && chmod -R 777 /etc/etcd-server
+
 COPY --from=builder /workspace/hohapiserver .
 ENTRYPOINT ["/hohapiserver"]

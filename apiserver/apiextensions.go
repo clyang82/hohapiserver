@@ -37,6 +37,7 @@ import (
 func CreateExtensions() (genericapiserver.Config, genericoptions.EtcdOptions, *apiextensionsapiserver.CustomResourceDefinitions, error) {
 	o := apiextensionsserveroptions.NewCustomResourceDefinitionsServerOptions(os.Stdout, os.Stderr)
 	o.RecommendedOptions.Etcd.StorageConfig.Transport.ServerList = []string{"https://etcd-socket:2379"}
+	o.RecommendedOptions.SecureServing.ServerCert.CertDirectory = "/etc/etcd-server"
 	o.RecommendedOptions.SecureServing.BindPort = 6443
 	o.RecommendedOptions.Authentication.RemoteKubeConfigFileOptional = true
 	o.RecommendedOptions.Authorization.RemoteKubeConfigFileOptional = true
