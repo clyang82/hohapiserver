@@ -1,0 +1,15 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: hub-of-hubs-apiserver
+  namespace: open-cluster-management
+  annotations:
+    "service.beta.openshift.io/serving-cert-secret-name": hub-of-hubs-apiserver
+spec:
+  selector:
+    app: hub-of-hubs-apiserver
+  ports:
+    - name: secure
+      protocol: TCP
+      port: 443
+      targetPort: 6443

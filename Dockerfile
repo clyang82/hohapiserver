@@ -1,16 +1,13 @@
-FROM golang:1.17 as builder
-WORKDIR /workspace
+FROM quay.io/bitnami/golang:1.17 AS builder
+WORKDIR /go/src/github.com/clyang82/hohapiserver
+COPY . .
 
-# Copy the sources
-COPY ./ ./
+RUN make build --warn-undefined-variables
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -o hohapiserver ./
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+ENV USER_UID=10001
 
-FROM gcr.io/distroless/base:debug
-WORKDIR /
+COPY --from=builder /go/src/github.com/clyang82/hohapiserver/hohapiserver /
+RUN microdnf update && microdnf clean all
 
-RUN mkdir /etc/etcd-server && chmod -R 777 /etc/etcd-server
-
-COPY --from=builder /workspace/hohapiserver .
-ENTRYPOINT ["/hohapiserver"]
+USER ${USER_UID}

@@ -1,0 +1,16 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: hoh-server
+  namespace: open-cluster-management
+spec:
+  port:
+    targetPort: secure
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: reencrypt
+  to:
+    kind: Service
+    name: hub-of-hubs-apiserver
+    weight: 100
+  wildcardPolicy: None

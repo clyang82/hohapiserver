@@ -2,13 +2,13 @@
 
 GOBIN := $(shell go env GOPATH)/bin
 
-all: fix fmt vet lint test tidy hohapiserver
+all: fix fmt vet lint test tidy build
 
 docker:
 	docker build ./ --tag hohapiserver:latest
 
-hohapiserver:
-	CGO_ENABLED=0 go build -o bin/hohapiserver ./
+build:
+	CGO_ENABLED=0 go build -o hohapiserver ./cmd/main.go
 
 fix:
 	go fix ./...

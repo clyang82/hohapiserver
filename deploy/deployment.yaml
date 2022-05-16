@@ -17,7 +17,10 @@ spec:
       serviceAccountName: hoh-apiserver-sa
       containers:
       - args:
-          - "/hohapiserver"
+        - "/hub-of-hubs-apis"
+        - "--secure-port=6443"
+        - "--tls-cert-file=/var/run/apiservice/tls.crt"
+        - "--tls-private-key-file=/var/run/apiservice/tls.key"
         env:
         name: hub-of-hubs-apiserver
         image: quay.io/clyang82/hub-of-hubs-apiserver:latest
@@ -29,3 +32,11 @@ spec:
               - ALL
           privileged: false
           runAsNonRoot: true
+        volumeMounts:
+        - mountPath: /var/run/apiservice
+          name: apiservice-certs
+      volumes:
+      - name: apiservice-certs
+        secret:
+          defaultMode: 420
+          secretName: hub-of-hubs-apiserver
