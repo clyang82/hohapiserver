@@ -1,16 +1,3 @@
-/*
-Copyright 2020 The Kubernetes Authors.
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package server
 
 import (
@@ -19,7 +6,7 @@ import (
 
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/rest"
 
 	"github.com/clyang82/hohapiserver/etcd"
 )
@@ -31,8 +18,7 @@ type HoHApiServer struct {
 	//contains server starting options
 	options *Options
 
-	client          dynamic.Interface
-	informerFactory dynamicinformer.DynamicSharedInformerFactory
+	client dynamic.Interface
 
 	syncedCh chan struct{}
 }
@@ -52,13 +38,11 @@ type preShutdownHookEntry struct {
 	hook genericapiserver.PreShutdownHookFunc
 }
 
-func NewHoHApiServer(opts *Options, client dynamic.Interface,
-	informerFactory dynamicinformer.DynamicSharedInformerFactory) *HoHApiServer {
+func NewHoHApiServer(opts *Options, client dynamic.Interface) *HoHApiServer {
 	return &HoHApiServer{
-		options:         opts,
-		client:          client,
-		informerFactory: informerFactory,
-		syncedCh:        make(chan struct{}),
+		options:  opts,
+		client:   client,
+		syncedCh: make(chan struct{}),
 	}
 }
 
@@ -85,15 +69,23 @@ func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 		return err
 	}
 
-	err = s.InstallPolicyController(ctx)
+	controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
+
+	err = s.InstallPolicyController(ctx, controllerConfig)
 	if err != nil {
 		return err
 	}
 
-	s.informerFactory.Start(ctx.Done())
-
 	// TODO: kubectl explain currently failing on crd resources, but works on apiservices
 	// kubectl get and describe do work, though
+
+	// Add our custom hooks to the underlying api server
+	for _, entry := range s.postStartHooks {
+		err := aggregatorServer.GenericAPIServer.AddPostStartHook(entry.name, entry.hook)
+		if err != nil {
+			return err
+		}
+	}
 
 	return RunAggregator(aggregatorServer, ctx.Done())
 }

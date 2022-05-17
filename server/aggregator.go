@@ -1,19 +1,3 @@
-/*
-Copyright 2020 The Kubernetes Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package server
 
 import (
@@ -21,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	apiextensionsapiserver "k8s.io/apiextensions-apiserver/pkg/apiserver"
 	apiextensionsinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -36,8 +19,6 @@ import (
 	"k8s.io/apiserver/pkg/server/healthz"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	"k8s.io/apiserver/pkg/server/resourceconfig"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	v1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
@@ -90,14 +71,12 @@ func CreateAggregatorConfig(sharedConfig genericapiserver.Config, sharedEtcdOpti
 	}
 
 	genericConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(getOpenAPIConfig, openapinamer.NewDefinitionNamer(apiextensionsapiserver.Scheme, aggregatorscheme.Scheme))
-	genericConfig.OpenAPIConfig.Info.Title = "HoHApiServer"
-	genericConfig.OpenAPIConfig.Info.Version = "0.1"
+	genericConfig.OpenAPIConfig.Info.Title = "Hub of hubs API server"
+	genericConfig.OpenAPIConfig.Info.Version = "0.1.0"
 	genericConfig.LongRunningFunc = filters.BasicLongRunningRequestCheck(
 		sets.NewString("watch"),
 		sets.NewString(),
 	)
-
-	// TODO: Do we need to override AdmissionControl similar to: https://github.com/kubernetes/kubernetes/blob/c7911a384cbc11a4b5003da081b181d6b814d07e/cmd/kube-apiserver/app/aggregator.go#L70-L80?
 
 	// copy the etcd options so we don't mutate originals.
 	etcdOptions := sharedEtcdOptions
@@ -114,17 +93,9 @@ func CreateAggregatorConfig(sharedConfig genericapiserver.Config, sharedEtcdOpti
 
 	genericConfig.MergedResourceConfig = mergedResourceConfig
 
-	// TODO: fake it until we make it
-	versionedInformers := informers.NewSharedInformerFactory(fake.NewSimpleClientset(), 10*time.Minute)
-	serviceResolver := aggregatorapiserver.NewClusterIPServiceResolver(versionedInformers.Core().V1().Services().Lister())
-
 	aggregatorConfig := &aggregatorapiserver.Config{
 		GenericConfig: &genericapiserver.RecommendedConfig{
-			Config:                genericConfig,
-			SharedInformerFactory: versionedInformers,
-		},
-		ExtraConfig: aggregatorapiserver.ExtraConfig{
-			ServiceResolver: serviceResolver,
+			Config: genericConfig,
 		},
 	}
 
@@ -148,6 +119,7 @@ func CreateAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 
 	autoRegistrationController := autoregister.NewAutoRegisterController(aggregatorServer.APIRegistrationInformers.Apiregistration().V1().APIServices(), apiRegistrationClient)
 	apiServices := apiServicesToRegister(delegateAPIServer, autoRegistrationController)
+
 	crdRegistrationController := crdregistration.NewCRDRegistrationController(
 		apiExtensionInformers.Apiextensions().V1().CustomResourceDefinitions(),
 		autoRegistrationController)

@@ -3,7 +3,6 @@ package main
 import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/component-base/cli/flag"
 	"k8s.io/klog"
@@ -28,9 +27,8 @@ func main() {
 	if err != nil {
 		klog.Fatal(err)
 	}
-	dynInformerFactory := dynamicinformer.NewDynamicSharedInformerFactory(dynamicClient, 0)
 
-	s := server.NewHoHApiServer(opts, dynamicClient, dynInformerFactory)
+	s := server.NewHoHApiServer(opts, dynamicClient)
 
 	if err := s.RunHoHApiServer(genericapiserver.SetupSignalContext()); err != nil {
 		klog.Fatal(err)

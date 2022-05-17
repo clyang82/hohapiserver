@@ -19,18 +19,12 @@ package server
 import (
 	"fmt"
 	"net"
-	"net/url"
 	"os"
-	"time"
 
 	apiextensionsapiserver "k8s.io/apiextensions-apiserver/pkg/apiserver"
 	apiextensionsserveroptions "k8s.io/apiextensions-apiserver/pkg/cmd/server/options"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
-	"k8s.io/apiserver/pkg/util/proxy"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes/fake"
-	corev1 "k8s.io/client-go/listers/core/v1"
 
 	"github.com/clyang82/hohapiserver/etcd"
 )
@@ -73,14 +67,10 @@ func CreateExtensions(opts *Options, clientInfo etcd.ClientInfo) (genericapiserv
 		return serverConfig.Config, *o.RecommendedOptions.Etcd, nil, err
 	}
 
-	// TODO: fake it until we make it
-	serverConfig.SharedInformerFactory = informers.NewSharedInformerFactory(fake.NewSimpleClientset(), 10*time.Minute)
-
 	config := &apiextensionsapiserver.Config{
 		GenericConfig: serverConfig,
 		ExtraConfig: apiextensionsapiserver.ExtraConfig{
 			CRDRESTOptionsGetter: apiextensionsserveroptions.NewCRDRESTOptionsGetter(*o.RecommendedOptions.Etcd),
-			ServiceResolver:      &serviceResolver{serverConfig.SharedInformerFactory.Core().V1().Services().Lister()},
 			MasterCount:          1,
 		},
 	}
@@ -91,12 +81,4 @@ func CreateExtensions(opts *Options, clientInfo etcd.ClientInfo) (genericapiserv
 	}
 
 	return serverConfig.Config, *o.RecommendedOptions.Etcd, server, nil
-}
-
-type serviceResolver struct {
-	services corev1.ServiceLister
-}
-
-func (r *serviceResolver) ResolveEndpoint(namespace, name string, port int32) (*url.URL, error) {
-	return proxy.ResolveCluster(r.services, namespace, name, port)
 }

@@ -1,0 +1,153 @@
+package controllers
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog"
+)
+
+type GenericController struct {
+	name string
+	// client is used to apply resources
+	client dynamic.Interface
+	// informerFactory is used to watch the hosted resources
+	informerFactory dynamicinformer.DynamicSharedInformerFactory
+
+	handler cache.ResourceEventHandler
+
+	queue   workqueue.RateLimitingInterface
+	Indexer cache.Indexer
+	gvr     schema.GroupVersionResource
+}
+
+func NewGenericController(ctx context.Context, name string, client dynamic.Interface,
+	gvr schema.GroupVersionResource) *GenericController {
+
+	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name)
+
+	c := &GenericController{
+		name:   name,
+		client: client,
+		queue:  queue,
+		gvr:    gvr,
+	}
+
+	return c
+}
+
+// enqueue enqueues a resource.
+func (c *GenericController) Enqueue(obj interface{}) {
+	key, err := cache.MetaNamespaceKeyFunc(obj)
+	if err != nil {
+		utilruntime.HandleError(err)
+		return
+	}
+	c.queue.Add(key)
+}
+
+func (c *GenericController) Run(ctx context.Context, numThreads int) {
+	defer utilruntime.HandleCrash()
+	defer c.queue.ShutDown()
+
+	klog.Infof("Starting %s controller", c.name)
+	defer klog.Infof("Shutting down %s controller", c.name)
+
+	for i := 0; i < numThreads; i++ {
+		go wait.UntilWithContext(ctx, c.startWorker, time.Second)
+	}
+
+	<-ctx.Done()
+}
+
+func (c *GenericController) startWorker(ctx context.Context) {
+	for c.processNextWorkItem(ctx) {
+	}
+}
+
+func (c *GenericController) processNextWorkItem(ctx context.Context) bool {
+	// Wait until there is a new item in the working queue
+	k, quit := c.queue.Get()
+	if quit {
+		return false
+	}
+	key := k.(string)
+
+	// No matter what, tell the queue we're done with this key, to unblock
+	// other workers.
+	defer c.queue.Done(key)
+
+	if err := c.process(ctx, key); err != nil {
+		utilruntime.HandleError(fmt.Errorf("%q controller failed to sync %q, err: %w", c.name, key, err))
+		c.queue.AddRateLimited(key)
+		return true
+	}
+	c.queue.Forget(key)
+	return true
+}
+
+func (c *GenericController) process(ctx context.Context, key string) error {
+
+	obj, _, err := c.Indexer.GetByKey(key)
+	if err != nil {
+		return err
+	}
+
+	err = c.reconcile(ctx, obj)
+	if err != nil {
+		return err
+	}
+
+	// Regardless of whether reconcile returned an error or not, always try to patch status if needed. Return the
+	// reconciliation error at the end.
+
+	// If the object being reconciled changed as a result, update it.
+	// if !equality.Semantic.DeepEqual(old.Status, obj.Status) {
+
+	// }
+
+	return nil
+}
+
+func (c *GenericController) reconcile(ctx context.Context, obj interface{}) error {
+	klog.Info("Starting to reconcile the resource")
+	unstructuredObj := obj.(*unstructured.Unstructured)
+	manipulateObj(unstructuredObj)
+
+	var err error
+	if unstructuredObj.GetNamespace() != "" {
+		_, err = c.client.Resource(c.gvr).Namespace(unstructuredObj.GetNamespace()).
+			Create(ctx, unstructuredObj, metav1.CreateOptions{})
+	} else {
+		_, err = c.client.Resource(c.gvr).
+			Create(ctx, unstructuredObj, metav1.CreateOptions{})
+	}
+	if err != nil {
+		klog.Errorf("failed to create %s: %v", unstructuredObj.GetKind(), err)
+		return err
+	}
+	return nil
+}
+
+func manipulateObj(unstructuredObj *unstructured.Unstructured) {
+	unstructuredObj.SetUID("")
+	unstructuredObj.SetResourceVersion("")
+	unstructuredObj.SetManagedFields(nil)
+	unstructuredObj.SetFinalizers(nil)
+	unstructuredObj.SetGeneration(0)
+	unstructuredObj.SetOwnerReferences(nil)
+	unstructuredObj.SetClusterName("")
+
+	delete(unstructuredObj.GetAnnotations(), "kubectl.kubernetes.io/last-applied-configuration")
+
+}
