@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -122,20 +123,59 @@ func (c *GenericController) process(ctx context.Context, key string) error {
 func (c *GenericController) reconcile(ctx context.Context, obj interface{}) error {
 	klog.Info("Starting to reconcile the resource")
 	unstructuredObj := obj.(*unstructured.Unstructured)
+
+	//clean up unneeded fields
 	manipulateObj(unstructuredObj)
 
-	var err error
 	if unstructuredObj.GetNamespace() != "" {
+		runtimeObj, err := c.client.Resource(c.gvr).Namespace(unstructuredObj.GetNamespace()).
+			Get(ctx, unstructuredObj.GetName(), metav1.GetOptions{})
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				_, err = c.client.Resource(c.gvr).Namespace(unstructuredObj.GetNamespace()).
+					Create(ctx, unstructuredObj, metav1.CreateOptions{})
+				if err != nil {
+					klog.Errorf("failed to create %s: %v", unstructuredObj.GetKind(), err)
+					return err
+				}
+				return nil
+			}
+			klog.Errorf("failed to list %s: %v", unstructuredObj.GetKind(), err)
+			return err
+		}
+		unstructuredObj.SetResourceVersion(runtimeObj.GetResourceVersion())
 		_, err = c.client.Resource(c.gvr).Namespace(unstructuredObj.GetNamespace()).
-			Create(ctx, unstructuredObj, metav1.CreateOptions{})
+			Update(ctx, unstructuredObj, metav1.UpdateOptions{})
+		if err != nil {
+			klog.Errorf("failed to update %s: %v", unstructuredObj.GetKind(), err)
+			return err
+		}
 	} else {
+		runtimeObj, err := c.client.Resource(c.gvr).
+			Get(ctx, unstructuredObj.GetName(), metav1.GetOptions{})
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				_, err = c.client.Resource(c.gvr).
+					Create(ctx, unstructuredObj, metav1.CreateOptions{})
+				if err != nil {
+					klog.Errorf("failed to create %s: %v", unstructuredObj.GetKind(), err)
+					return err
+				}
+				return nil
+			}
+			klog.Errorf("failed to list %s: %v", unstructuredObj.GetKind(), err)
+			return err
+		}
+
+		unstructuredObj.SetResourceVersion(runtimeObj.GetResourceVersion())
 		_, err = c.client.Resource(c.gvr).
-			Create(ctx, unstructuredObj, metav1.CreateOptions{})
+			Update(ctx, unstructuredObj, metav1.UpdateOptions{})
+		if err != nil {
+			klog.Errorf("failed to update %s: %v", unstructuredObj.GetKind(), err)
+			return err
+		}
 	}
-	if err != nil {
-		klog.Errorf("failed to create %s: %v", unstructuredObj.GetKind(), err)
-		return err
-	}
+
 	return nil
 }
 
