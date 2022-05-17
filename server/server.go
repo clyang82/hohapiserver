@@ -76,6 +76,11 @@ func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 		return err
 	}
 
+	err = s.InstallCRDController(ctx, controllerConfig)
+	if err != nil {
+		return err
+	}
+
 	// TODO: kubectl explain currently failing on crd resources, but works on apiservices
 	// kubectl get and describe do work, though
 

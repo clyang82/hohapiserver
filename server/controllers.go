@@ -73,7 +73,7 @@ func (s *HoHApiServer) InstallCRDController(ctx context.Context, config *rest.Co
 	}
 	// configure the dynamic informer event handlers
 	dynInformerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(s.client, 0, "", func(o *metav1.ListOptions) {
-		o.FieldSelector = fmt.Sprintf("metadata.namespace==%s", "policies.policy.open-cluster-management.io")
+		o.FieldSelector = fmt.Sprintf("metadata.name==%s", "policies.policy.open-cluster-management.io")
 	})
 	c := controllers.NewGenericController(ctx, "policy-controller", dynamicClient, gvr)
 	dynInformerFactory.ForResource(gvr).Informer().AddEventHandler(

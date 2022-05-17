@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	apiextensionsapiserver "k8s.io/apiextensions-apiserver/pkg/apiserver"
 	apiextensionsinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -19,6 +20,8 @@ import (
 	"k8s.io/apiserver/pkg/server/healthz"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	"k8s.io/apiserver/pkg/server/resourceconfig"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	v1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
@@ -93,9 +96,16 @@ func CreateAggregatorConfig(sharedConfig genericapiserver.Config, sharedEtcdOpti
 
 	genericConfig.MergedResourceConfig = mergedResourceConfig
 
+	versionedInformers := informers.NewSharedInformerFactory(fake.NewSimpleClientset(), 10*time.Minute)
+	serviceResolver := aggregatorapiserver.NewClusterIPServiceResolver(versionedInformers.Core().V1().Services().Lister())
+
 	aggregatorConfig := &aggregatorapiserver.Config{
 		GenericConfig: &genericapiserver.RecommendedConfig{
-			Config: genericConfig,
+			Config:                genericConfig,
+			SharedInformerFactory: versionedInformers,
+		},
+		ExtraConfig: aggregatorapiserver.ExtraConfig{
+			ServiceResolver: serviceResolver,
 		},
 	}
 
