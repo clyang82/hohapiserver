@@ -51,11 +51,12 @@ func (s *HoHApiServer) InstallCRDController(ctx context.Context, config *rest.Co
 
 		// configure the dynamic informer event handlers
 		c := controllers.NewGenericController(ctx, fmt.Sprintf("%s-controller", name), dynamicClient, crdGVR)
-		c.Indexers = s.dynInformerFactory.ForResource(crdGVR).Informer().GetIndexer().GetIndexers()
+		c.Indexer = s.dynInformerFactory.ForResource(crdGVR).Informer().GetIndexer()
 
-		c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, crdGVR, "", 0, c.Indexers, func(o *metav1.ListOptions) {
-			o.FieldSelector = fmt.Sprintf("%s=%s", "metadata.name", name)
-		})
+		c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, crdGVR, "", 0, c.Indexer.GetIndexers(),
+			func(o *metav1.ListOptions) {
+				o.FieldSelector = fmt.Sprintf("%s=%s", "metadata.name", name)
+			})
 		c.Informer.Informer().AddEventHandler(
 			cache.ResourceEventHandlerFuncs{
 				AddFunc: func(obj interface{}) {
@@ -93,10 +94,11 @@ func (s *HoHApiServer) InstallPolicyController(ctx context.Context, config *rest
 	}
 
 	c := controllers.NewGenericController(ctx, "policy-controller", dynamicClient, gvr)
-	c.Indexers = s.dynInformerFactory.ForResource(gvr).Informer().GetIndexer().GetIndexers()
-	c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, gvr, "", 0, c.Indexers, func(o *metav1.ListOptions) {
-		o.LabelSelector = fmt.Sprintf("!%s,!%s", rootPolicyLabel, localResourceLabel)
-	})
+	c.Indexer = s.dynInformerFactory.ForResource(gvr).Informer().GetIndexer()
+	c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, gvr, "", 0, c.Indexer.GetIndexers(),
+		func(o *metav1.ListOptions) {
+			o.LabelSelector = fmt.Sprintf("!%s,!%s", rootPolicyLabel, localResourceLabel)
+		})
 	c.Informer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -132,10 +134,11 @@ func (s *HoHApiServer) InstallPlacementRuleController(ctx context.Context, confi
 	}
 
 	c := controllers.NewGenericController(ctx, "policy-controller", dynamicClient, gvr)
-	c.Indexers = s.dynInformerFactory.ForResource(gvr).Informer().GetIndexer().GetIndexers()
-	c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, gvr, "", 0, c.Indexers, func(o *metav1.ListOptions) {
-		o.LabelSelector = fmt.Sprintf("!%s", localResourceLabel)
-	})
+	c.Indexer = s.dynInformerFactory.ForResource(gvr).Informer().GetIndexer()
+	c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, gvr, "", 0, c.Indexer.GetIndexers(),
+		func(o *metav1.ListOptions) {
+			o.LabelSelector = fmt.Sprintf("!%s", localResourceLabel)
+		})
 	c.Informer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -171,10 +174,11 @@ func (s *HoHApiServer) InstallPlacementBindingController(ctx context.Context, co
 	}
 
 	c := controllers.NewGenericController(ctx, "policy-controller", dynamicClient, gvr)
-	c.Indexers = s.dynInformerFactory.ForResource(gvr).Informer().GetIndexer().GetIndexers()
-	c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, gvr, "", 0, c.Indexers, func(o *metav1.ListOptions) {
-		o.LabelSelector = fmt.Sprintf("!%s", localResourceLabel)
-	})
+	c.Indexer = s.dynInformerFactory.ForResource(gvr).Informer().GetIndexer()
+	c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, gvr, "", 0, c.Indexer.GetIndexers(),
+		func(o *metav1.ListOptions) {
+			o.LabelSelector = fmt.Sprintf("!%s", localResourceLabel)
+		})
 	c.Informer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {

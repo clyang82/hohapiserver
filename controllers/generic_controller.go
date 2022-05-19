@@ -27,9 +27,9 @@ type GenericController struct {
 
 	handler cache.ResourceEventHandler
 
-	queue    workqueue.RateLimitingInterface
-	Indexers cache.Indexers
-	gvr      schema.GroupVersionResource
+	queue   workqueue.RateLimitingInterface
+	Indexer cache.Indexer
+	gvr     schema.GroupVersionResource
 }
 
 func NewGenericController(ctx context.Context, name string, client dynamic.Interface,
