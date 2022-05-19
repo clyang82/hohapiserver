@@ -14,9 +14,70 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	placementrulev1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 
 	"github.com/clyang82/hohapiserver/controllers"
 )
+
+const (
+	rootPolicyLabel    = "policy.open-cluster-management.io/root-policy"
+	localResourceLabel = "hub-of-hubs.open-cluster-management.io/local-resource"
+)
+
+func (s *HoHApiServer) InstallCRDController(ctx context.Context, config *rest.Config) error {
+
+	config = rest.AddUserAgent(rest.CopyConfig(config), "hoh-crd-controller")
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		klog.Fatal(err)
+	}
+
+	crds := []string{
+		"policies.policy.open-cluster-management.io",
+		"placementbindings.policy.open-cluster-management.io",
+		"placementrules.apps.open-cluster-management.io",
+		"managedclusters.cluster.open-cluster-management.io",
+		"subscriptionreports.apps.open-cluster-management.io",
+		"subscriptions.apps.open-cluster-management.io",
+		"subscriptionstatuses.apps.open-cluster-management.io",
+	}
+
+	crdGVR := schema.GroupVersionResource{
+		Group:    apiextensionsv1.SchemeGroupVersion.Group,
+		Version:  apiextensionsv1.SchemeGroupVersion.Version,
+		Resource: "customresourcedefinitions",
+	}
+	for _, name := range crds {
+
+		// configure the dynamic informer event handlers
+		c := controllers.NewGenericController(ctx, fmt.Sprintf("%s-controller", name), dynamicClient, crdGVR)
+		c.Indexers = s.dynInformerFactory.ForResource(crdGVR).Informer().GetIndexer().GetIndexers()
+
+		c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, crdGVR, "", 0, c.Indexers, func(o *metav1.ListOptions) {
+			o.FieldSelector = fmt.Sprintf("%s=%s", "metadata.name", name)
+		})
+		c.Informer.Informer().AddEventHandler(
+			cache.ResourceEventHandlerFuncs{
+				AddFunc: func(obj interface{}) {
+					c.Enqueue(obj)
+				},
+				UpdateFunc: func(_, obj interface{}) {
+					c.Enqueue(obj)
+				},
+				DeleteFunc: func(obj interface{}) {
+					c.Enqueue(obj)
+				},
+			},
+		)
+
+		s.AddPostStartHook("hoh-start-crd-controller", func(hookContext genericapiserver.PostStartHookContext) error {
+			go c.Run(ctx, 2)
+			return nil
+		})
+
+	}
+	return nil
+}
 
 func (s *HoHApiServer) InstallPolicyController(ctx context.Context, config *rest.Config) error {
 	config = rest.AddUserAgent(rest.CopyConfig(config), "hoh-policy-controller")
@@ -31,11 +92,12 @@ func (s *HoHApiServer) InstallPolicyController(ctx context.Context, config *rest
 		Resource: "policies",
 	}
 
-	dynInformerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(s.client, 0, "", func(o *metav1.ListOptions) {
-		o.LabelSelector = fmt.Sprintf("!%s", "policy.open-cluster-management.io/root-policy")
-	})
 	c := controllers.NewGenericController(ctx, "policy-controller", dynamicClient, gvr)
-	dynInformerFactory.ForResource(gvr).Informer().AddEventHandler(
+	c.Indexers = s.dynInformerFactory.ForResource(gvr).Informer().GetIndexer().GetIndexers()
+	c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, gvr, "", 0, c.Indexers, func(o *metav1.ListOptions) {
+		o.LabelSelector = fmt.Sprintf("!%s,!%s", rootPolicyLabel, localResourceLabel)
+	})
+	c.Informer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				c.Enqueue(obj)
@@ -48,8 +110,6 @@ func (s *HoHApiServer) InstallPolicyController(ctx context.Context, config *rest
 			},
 		},
 	)
-	dynInformerFactory.Start(ctx.Done())
-	c.Indexer = dynInformerFactory.ForResource(gvr).Informer().GetIndexer()
 
 	s.AddPostStartHook("hoh-start-policy-controller", func(hookContext genericapiserver.PostStartHookContext) error {
 		go c.Run(ctx, 2)
@@ -58,25 +118,25 @@ func (s *HoHApiServer) InstallPolicyController(ctx context.Context, config *rest
 	return nil
 }
 
-func (s *HoHApiServer) InstallCRDController(ctx context.Context, config *rest.Config) error {
-
-	config = rest.AddUserAgent(rest.CopyConfig(config), "hoh-crd-controller")
+func (s *HoHApiServer) InstallPlacementRuleController(ctx context.Context, config *rest.Config) error {
+	config = rest.AddUserAgent(rest.CopyConfig(config), "hoh-placementrule-controller")
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		klog.Fatal(err)
 	}
 
 	gvr := schema.GroupVersionResource{
-		Group:    apiextensionsv1.SchemeGroupVersion.Group,
-		Version:  apiextensionsv1.SchemeGroupVersion.Version,
-		Resource: "customresourcedefinitions",
+		Group:    placementrulev1.SchemeGroupVersion.Group,
+		Version:  placementrulev1.SchemeGroupVersion.Version,
+		Resource: "placementrules",
 	}
-	// configure the dynamic informer event handlers
-	dynInformerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(s.client, 0, "", func(o *metav1.ListOptions) {
-		o.FieldSelector = fmt.Sprintf("metadata.name==%s", "policies.policy.open-cluster-management.io")
-	})
+
 	c := controllers.NewGenericController(ctx, "policy-controller", dynamicClient, gvr)
-	dynInformerFactory.ForResource(gvr).Informer().AddEventHandler(
+	c.Indexers = s.dynInformerFactory.ForResource(gvr).Informer().GetIndexer().GetIndexers()
+	c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, gvr, "", 0, c.Indexers, func(o *metav1.ListOptions) {
+		o.LabelSelector = fmt.Sprintf("!%s", localResourceLabel)
+	})
+	c.Informer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				c.Enqueue(obj)
@@ -89,10 +149,47 @@ func (s *HoHApiServer) InstallCRDController(ctx context.Context, config *rest.Co
 			},
 		},
 	)
-	dynInformerFactory.Start(ctx.Done())
-	c.Indexer = dynInformerFactory.ForResource(gvr).Informer().GetIndexer()
 
-	s.AddPostStartHook("hoh-start-crd-controller", func(hookContext genericapiserver.PostStartHookContext) error {
+	s.AddPostStartHook("hoh-start-placementrule-controller", func(hookContext genericapiserver.PostStartHookContext) error {
+		go c.Run(ctx, 2)
+		return nil
+	})
+	return nil
+}
+
+func (s *HoHApiServer) InstallPlacementBindingController(ctx context.Context, config *rest.Config) error {
+	config = rest.AddUserAgent(rest.CopyConfig(config), "hoh-placementbinding-controller")
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		klog.Fatal(err)
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    policyv1.GroupVersion.Group,
+		Version:  policyv1.GroupVersion.Version,
+		Resource: "placementbindings",
+	}
+
+	c := controllers.NewGenericController(ctx, "policy-controller", dynamicClient, gvr)
+	c.Indexers = s.dynInformerFactory.ForResource(gvr).Informer().GetIndexer().GetIndexers()
+	c.Informer = dynamicinformer.NewFilteredDynamicInformer(s.client, gvr, "", 0, c.Indexers, func(o *metav1.ListOptions) {
+		o.LabelSelector = fmt.Sprintf("!%s", localResourceLabel)
+	})
+	c.Informer.Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				c.Enqueue(obj)
+			},
+			UpdateFunc: func(_, obj interface{}) {
+				c.Enqueue(obj)
+			},
+			DeleteFunc: func(obj interface{}) {
+				c.Enqueue(obj)
+			},
+		},
+	)
+
+	s.AddPostStartHook("hoh-start-placementbinding-controller", func(hookContext genericapiserver.PostStartHookContext) error {
 		go c.Run(ctx, 2)
 		return nil
 	})

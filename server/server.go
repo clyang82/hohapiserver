@@ -6,6 +6,7 @@ import (
 
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/rest"
 
 	"github.com/clyang82/hohapiserver/etcd"
@@ -18,7 +19,8 @@ type HoHApiServer struct {
 	//contains server starting options
 	options *Options
 
-	client dynamic.Interface
+	client             dynamic.Interface
+	dynInformerFactory dynamicinformer.DynamicSharedInformerFactory
 
 	syncedCh chan struct{}
 }
@@ -38,11 +40,13 @@ type preShutdownHookEntry struct {
 	hook genericapiserver.PreShutdownHookFunc
 }
 
-func NewHoHApiServer(opts *Options, client dynamic.Interface) *HoHApiServer {
+func NewHoHApiServer(opts *Options, client dynamic.Interface,
+	dynInformerFactory dynamicinformer.DynamicSharedInformerFactory) *HoHApiServer {
 	return &HoHApiServer{
-		options:  opts,
-		client:   client,
-		syncedCh: make(chan struct{}),
+		options:            opts,
+		client:             client,
+		dynInformerFactory: dynInformerFactory,
+		syncedCh:           make(chan struct{}),
 	}
 }
 
@@ -71,15 +75,26 @@ func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 
 	controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
 
+	err = s.InstallCRDController(ctx, controllerConfig)
+	if err != nil {
+		return err
+	}
+
 	err = s.InstallPolicyController(ctx, controllerConfig)
 	if err != nil {
 		return err
 	}
 
-	err = s.InstallCRDController(ctx, controllerConfig)
+	err = s.InstallPlacementRuleController(ctx, controllerConfig)
 	if err != nil {
 		return err
 	}
+
+	err = s.InstallPlacementBindingController(ctx, controllerConfig)
+	if err != nil {
+		return err
+	}
+	s.dynInformerFactory.Start(ctx.Done())
 
 	// TODO: kubectl explain currently failing on crd resources, but works on apiservices
 	// kubectl get and describe do work, though

@@ -12,7 +12,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
@@ -22,14 +22,14 @@ type GenericController struct {
 	name string
 	// client is used to apply resources
 	client dynamic.Interface
-	// informerFactory is used to watch the hosted resources
-	informerFactory dynamicinformer.DynamicSharedInformerFactory
+	// informer is used to watch the hosted resources
+	Informer informers.GenericInformer
 
 	handler cache.ResourceEventHandler
 
-	queue   workqueue.RateLimitingInterface
-	Indexer cache.Indexer
-	gvr     schema.GroupVersionResource
+	queue    workqueue.RateLimitingInterface
+	Indexers cache.Indexers
+	gvr      schema.GroupVersionResource
 }
 
 func NewGenericController(ctx context.Context, name string, client dynamic.Interface,
