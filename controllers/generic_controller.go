@@ -25,8 +25,6 @@ type GenericController struct {
 	// informer is used to watch the hosted resources
 	Informer informers.GenericInformer
 
-	handler cache.ResourceEventHandler
-
 	queue   workqueue.RateLimitingInterface
 	Indexer cache.Indexer
 	gvr     schema.GroupVersionResource
@@ -61,8 +59,8 @@ func (c *GenericController) Run(ctx context.Context, numThreads int) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
-	klog.Infof("Starting %s controller", c.name)
-	defer klog.Infof("Shutting down %s controller", c.name)
+	klog.Infof("Starting %s", c.name)
+	defer klog.Infof("Shutting down %s", c.name)
 
 	for i := 0; i < numThreads; i++ {
 		go wait.UntilWithContext(ctx, c.startWorker, time.Second)

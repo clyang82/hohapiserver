@@ -8,6 +8,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 
 	"github.com/clyang82/hohapiserver/etcd"
 )
@@ -18,6 +19,9 @@ type HoHApiServer struct {
 
 	//contains server starting options
 	options *Options
+
+	// contains caches
+	Cache cache.Cache
 
 	client             dynamic.Interface
 	dynInformerFactory dynamicinformer.DynamicSharedInformerFactory
@@ -69,6 +73,11 @@ func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 
 	aggregatorServer, err := CreateAggregatorServer(config,
 		extensionServer.GenericAPIServer, extensionServer.Informers)
+	if err != nil {
+		return err
+	}
+
+	err := s.CreateCache(ctx, config)
 	if err != nil {
 		return err
 	}

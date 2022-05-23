@@ -3,6 +3,7 @@ module github.com/clyang82/hohapiserver
 go 1.17
 
 require (
+	github.com/spf13/pflag v1.0.5
 	go.etcd.io/etcd/client/pkg/v3 v3.5.1
 	go.etcd.io/etcd/server/v3 v3.5.0
 	k8s.io/apiextensions-apiserver v0.23.3
@@ -15,6 +16,8 @@ require (
 	k8s.io/kube-aggregator v0.23.3
 	k8s.io/kube-openapi v0.0.0-20211115234752-e816edb12b65
 	open-cluster-management.io/governance-policy-propagator v0.7.0
+	open-cluster-management.io/multicloud-operators-subscription v0.6.0
+	sigs.k8s.io/controller-runtime v0.11.1
 )
 
 require (
@@ -72,7 +75,6 @@ require (
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/spf13/cobra v1.4.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stoewer/go-strcase v1.2.0 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20220101234140-673ab2c3ae75 // indirect
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
@@ -114,9 +116,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/api v0.23.3 // indirect
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9 // indirect
-	open-cluster-management.io/multicloud-operators-subscription v0.6.0 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.30 // indirect
-	sigs.k8s.io/controller-runtime v0.11.1 // indirect
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
