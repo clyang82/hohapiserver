@@ -52,7 +52,7 @@ func (s *HoHApiServer) CreateCache(ctx context.Context) error {
 			{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
 			{LabelSelector: fmt.Sprint("!" + rootPolicyLabel)},
 		},
-		policyv1.SchemeGroupVersion.WithKind("PolicyBinding"): {
+		policyv1.SchemeGroupVersion.WithKind("PlacementBinding"): {
 			{LabelSelector: fmt.Sprint("!" + rootPolicyLabel)},
 		},
 		placementrulev1.SchemeGroupVersion.WithKind("PlacementRule"): {
@@ -69,6 +69,7 @@ func (s *HoHApiServer) CreateCache(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
 	go s.Cache.Start(ctx)
 	s.Cache.WaitForCacheSync(ctx)
 	return nil
@@ -83,120 +84,82 @@ func (s *HoHApiServer) InstallCRDController(ctx context.Context, config *rest.Co
 		klog.Fatal(err)
 	}
 
-	crdGVK := schema.GroupVersionKind{
-		Group:   apiextensionsv1.SchemeGroupVersion.Group,
-		Version: apiextensionsv1.SchemeGroupVersion.Version,
-		Kind:    "CustomResourceDefinition",
-	}
-
-	crdGVR := schema.GroupVersionResource{
-		Group:    apiextensionsv1.SchemeGroupVersion.Group,
-		Version:  apiextensionsv1.SchemeGroupVersion.Version,
-		Resource: "customresourcedefinitions",
-	}
-
-	informer, err := s.Cache.GetInformerForKind(ctx, crdGVK)
+	informer, err := s.Cache.GetInformerForKind(ctx, apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
 	if err != nil {
 		return err
 	}
 	// configure the dynamic informer event handlers
-	c := controllers.NewGenericController(ctx, controllerName, dynamicClient, crdGVR, informer)
+	c := controllers.NewGenericController(ctx, controllerName, dynamicClient,
+		apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions"), informer, s.Cache)
 
 	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName), func(hookContext genericapiserver.PostStartHookContext) error {
-		go c.Run(ctx, 2)
+		go c.Run(ctx, 1)
 		return nil
 	})
 	return nil
 }
 
 func (s *HoHApiServer) InstallPolicyController(ctx context.Context, config *rest.Config) error {
-	config = rest.AddUserAgent(rest.CopyConfig(config), "hoh-policy")
+	controllerName := "hoh-policy-controller"
+	config = rest.AddUserAgent(rest.CopyConfig(config), controllerName)
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		klog.Fatal(err)
 	}
 
-	gvr := schema.GroupVersionResource{
-		Group:    policyv1.GroupVersion.Group,
-		Version:  policyv1.GroupVersion.Version,
-		Resource: "policies",
-	}
-	gvk := schema.GroupVersionKind{
-		Group:   policyv1.GroupVersion.Group,
-		Version: policyv1.GroupVersion.Version,
-		Kind:    "Policy",
-	}
-
-	informer, err := s.Cache.GetInformerForKind(ctx, gvk)
+	informer, err := s.Cache.GetInformerForKind(ctx, policyv1.SchemeGroupVersion.WithKind("Policy"))
 	if err != nil {
 		return err
 	}
-	c := controllers.NewGenericController(ctx, "policy", dynamicClient, gvr, informer)
+	c := controllers.NewGenericController(ctx, controllerName, dynamicClient,
+		policyv1.SchemeGroupVersion.WithResource("policies"), informer, s.Cache)
 
-	s.AddPostStartHook("hoh-start-policy-controller", func(hookContext genericapiserver.PostStartHookContext) error {
-		go c.Run(ctx, 2)
+	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName), func(hookContext genericapiserver.PostStartHookContext) error {
+		go c.Run(ctx, 1)
 		return nil
 	})
 	return nil
 }
 
 func (s *HoHApiServer) InstallPlacementRuleController(ctx context.Context, config *rest.Config) error {
-	config = rest.AddUserAgent(rest.CopyConfig(config), "hoh-placementrule")
+	controllerName := "hoh-placementrule-controller"
+	config = rest.AddUserAgent(rest.CopyConfig(config), controllerName)
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		klog.Fatal(err)
 	}
 
-	gvr := schema.GroupVersionResource{
-		Group:    placementrulev1.SchemeGroupVersion.Group,
-		Version:  placementrulev1.SchemeGroupVersion.Version,
-		Resource: "placementrules",
-	}
-	gvk := schema.GroupVersionKind{
-		Group:   placementrulev1.SchemeGroupVersion.Group,
-		Version: placementrulev1.SchemeGroupVersion.Version,
-		Kind:    "PlacementRule",
-	}
-
-	informer, err := s.Cache.GetInformerForKind(ctx, gvk)
+	informer, err := s.Cache.GetInformerForKind(ctx, placementrulev1.SchemeGroupVersion.WithKind("PlacementRule"))
 	if err != nil {
 		return err
 	}
-	c := controllers.NewGenericController(ctx, "placementrule", dynamicClient, gvr, informer)
+	c := controllers.NewGenericController(ctx, controllerName, dynamicClient,
+		placementrulev1.SchemeGroupVersion.WithResource("placementrules"), informer, s.Cache)
 
-	s.AddPostStartHook("hoh-start-placementrule-controller", func(hookContext genericapiserver.PostStartHookContext) error {
-		go c.Run(ctx, 2)
+	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName), func(hookContext genericapiserver.PostStartHookContext) error {
+		go c.Run(ctx, 1)
 		return nil
 	})
 	return nil
 }
 
 func (s *HoHApiServer) InstallPlacementBindingController(ctx context.Context, config *rest.Config) error {
+	controllerName := "hoh-placementbinding-controller"
 	config = rest.AddUserAgent(rest.CopyConfig(config), "hoh-placementbinding")
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		klog.Fatal(err)
 	}
 
-	gvr := schema.GroupVersionResource{
-		Group:    policyv1.GroupVersion.Group,
-		Version:  policyv1.GroupVersion.Version,
-		Resource: "placementbindings",
-	}
-	gvk := schema.GroupVersionKind{
-		Group:   policyv1.GroupVersion.Group,
-		Version: policyv1.GroupVersion.Version,
-		Kind:    "PlacementBinding",
-	}
-
-	informer, err := s.Cache.GetInformerForKind(ctx, gvk)
+	informer, err := s.Cache.GetInformerForKind(ctx, policyv1.SchemeGroupVersion.WithKind("PlacementBinding"))
 	if err != nil {
 		return err
 	}
-	c := controllers.NewGenericController(ctx, "placementbinding", dynamicClient, gvr, informer)
+	c := controllers.NewGenericController(ctx, controllerName, dynamicClient,
+		policyv1.SchemeGroupVersion.WithResource("placementbindings"), informer, s.Cache)
 
-	s.AddPostStartHook("hoh-start-placementbinding-controller", func(hookContext genericapiserver.PostStartHookContext) error {
-		go c.Run(ctx, 2)
+	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName), func(hookContext genericapiserver.PostStartHookContext) error {
+		go c.Run(ctx, 1)
 		return nil
 	})
 	return nil
