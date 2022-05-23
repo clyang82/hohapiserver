@@ -7,12 +7,12 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	toolscache "k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	placementrulev1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
@@ -28,12 +28,25 @@ const (
 
 func (s *HoHApiServer) CreateCache(ctx context.Context) error {
 
-	localResourceLabelReq, err := labels.NewRequirement(localResourceLabel, selection.DoesNotExist, []string{""})
+	localResourceLabelReq, err := labels.NewRequirement(localResourceLabel, selection.DoesNotExist, nil)
 	if err != nil {
 		return err
 	}
 
+	scheme := runtime.NewScheme()
+
+	if err := apiextensionsv1.AddToScheme(scheme); err != nil {
+		return err
+	}
+	if err := policyv1.AddToScheme(scheme); err != nil {
+		return err
+	}
+	if err := placementrulev1.AddToScheme(scheme); err != nil {
+		return err
+	}
+
 	opts := cache.Options{
+		Scheme: scheme,
 		SelectorsByObject: cache.SelectorsByObject{
 			&apiextensionsv1.CustomResourceDefinition{}: {
 				Field: fields.SelectorFromSet(
@@ -50,6 +63,8 @@ func (s *HoHApiServer) CreateCache(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	go s.Cache.Start(ctx)
+	s.Cache.WaitForCacheSync(ctx)
 	return nil
 }
 
@@ -74,25 +89,12 @@ func (s *HoHApiServer) InstallCRDController(ctx context.Context, config *rest.Co
 		Resource: "customresourcedefinitions",
 	}
 
-	// configure the dynamic informer event handlers
-	c := controllers.NewGenericController(ctx, controllerName, dynamicClient, crdGVR)
 	informer, err := s.Cache.GetInformerForKind(ctx, crdGVK)
 	if err != nil {
 		return err
 	}
-	informer.AddEventHandler(
-		toolscache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				c.Enqueue(obj)
-			},
-			UpdateFunc: func(_, obj interface{}) {
-				c.Enqueue(obj)
-			},
-			DeleteFunc: func(obj interface{}) {
-				c.Enqueue(obj)
-			},
-		},
-	)
+	// configure the dynamic informer event handlers
+	c := controllers.NewGenericController(ctx, controllerName, dynamicClient, crdGVR, informer)
 
 	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName), func(hookContext genericapiserver.PostStartHookContext) error {
 		go c.Run(ctx, 2)
@@ -119,24 +121,11 @@ func (s *HoHApiServer) InstallPolicyController(ctx context.Context, config *rest
 		Kind:    "Policy",
 	}
 
-	c := controllers.NewGenericController(ctx, "policy", dynamicClient, gvr)
 	informer, err := s.Cache.GetInformerForKind(ctx, gvk)
 	if err != nil {
 		return err
 	}
-	informer.AddEventHandler(
-		toolscache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				c.Enqueue(obj)
-			},
-			UpdateFunc: func(_, obj interface{}) {
-				c.Enqueue(obj)
-			},
-			DeleteFunc: func(obj interface{}) {
-				c.Enqueue(obj)
-			},
-		},
-	)
+	c := controllers.NewGenericController(ctx, "policy", dynamicClient, gvr, informer)
 
 	s.AddPostStartHook("hoh-start-policy-controller", func(hookContext genericapiserver.PostStartHookContext) error {
 		go c.Run(ctx, 2)
@@ -158,29 +147,16 @@ func (s *HoHApiServer) InstallPlacementRuleController(ctx context.Context, confi
 		Resource: "placementrules",
 	}
 	gvk := schema.GroupVersionKind{
-		Group:   policyv1.GroupVersion.Group,
-		Version: policyv1.GroupVersion.Version,
+		Group:   placementrulev1.SchemeGroupVersion.Group,
+		Version: placementrulev1.SchemeGroupVersion.Version,
 		Kind:    "PlacementRule",
 	}
 
-	c := controllers.NewGenericController(ctx, "placementrule", dynamicClient, gvr)
 	informer, err := s.Cache.GetInformerForKind(ctx, gvk)
 	if err != nil {
 		return err
 	}
-	informer.AddEventHandler(
-		toolscache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				c.Enqueue(obj)
-			},
-			UpdateFunc: func(_, obj interface{}) {
-				c.Enqueue(obj)
-			},
-			DeleteFunc: func(obj interface{}) {
-				c.Enqueue(obj)
-			},
-		},
-	)
+	c := controllers.NewGenericController(ctx, "placementrule", dynamicClient, gvr, informer)
 
 	s.AddPostStartHook("hoh-start-placementrule-controller", func(hookContext genericapiserver.PostStartHookContext) error {
 		go c.Run(ctx, 2)
@@ -207,24 +183,11 @@ func (s *HoHApiServer) InstallPlacementBindingController(ctx context.Context, co
 		Kind:    "PlacementBinding",
 	}
 
-	c := controllers.NewGenericController(ctx, "placementbinding", dynamicClient, gvr)
 	informer, err := s.Cache.GetInformerForKind(ctx, gvk)
 	if err != nil {
 		return err
 	}
-	informer.AddEventHandler(
-		toolscache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				c.Enqueue(obj)
-			},
-			UpdateFunc: func(_, obj interface{}) {
-				c.Enqueue(obj)
-			},
-			DeleteFunc: func(obj interface{}) {
-				c.Enqueue(obj)
-			},
-		},
-	)
+	c := controllers.NewGenericController(ctx, "placementbinding", dynamicClient, gvr, informer)
 
 	s.AddPostStartHook("hoh-start-placementbinding-controller", func(hookContext genericapiserver.PostStartHookContext) error {
 		go c.Run(ctx, 2)

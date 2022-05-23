@@ -12,47 +12,54 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
+	toolscache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 )
 
 type GenericController struct {
-	name string
+	context context.Context
+	name    string
 	// client is used to apply resources
 	client dynamic.Interface
 	// informer is used to watch the hosted resources
-	Informer informers.GenericInformer
+	informer cache.Informer
 
 	queue   workqueue.RateLimitingInterface
-	Indexer cache.Indexer
+	Indexer toolscache.Indexer
 	gvr     schema.GroupVersionResource
 }
 
 func NewGenericController(ctx context.Context, name string, client dynamic.Interface,
-	gvr schema.GroupVersionResource) *GenericController {
+	gvr schema.GroupVersionResource, informer cache.Informer) *GenericController {
 
 	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name)
 
 	c := &GenericController{
-		name:   name,
-		client: client,
-		queue:  queue,
-		gvr:    gvr,
+		context:  ctx,
+		name:     name,
+		client:   client,
+		queue:    queue,
+		gvr:      gvr,
+		informer: informer,
 	}
+
+	c.informer.AddEventHandler(
+		toolscache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				c.reconcile(c.context, obj)
+			},
+			UpdateFunc: func(_, obj interface{}) {
+				c.Enqueue(obj)
+			},
+			DeleteFunc: func(obj interface{}) {
+				c.Enqueue(obj)
+			},
+		},
+	)
 
 	return c
-}
-
-// enqueue enqueues a resource.
-func (c *GenericController) Enqueue(obj interface{}) {
-	key, err := cache.MetaNamespaceKeyFunc(obj)
-	if err != nil {
-		utilruntime.HandleError(err)
-		return
-	}
-	c.queue.Add(key)
 }
 
 func (c *GenericController) Run(ctx context.Context, numThreads int) {
@@ -65,8 +72,17 @@ func (c *GenericController) Run(ctx context.Context, numThreads int) {
 	for i := 0; i < numThreads; i++ {
 		go wait.UntilWithContext(ctx, c.startWorker, time.Second)
 	}
-
 	<-ctx.Done()
+}
+
+// enqueue enqueues a resource.
+func (c *GenericController) Enqueue(obj interface{}) {
+	key, err := toolscache.MetaNamespaceKeyFunc(obj)
+	if err != nil {
+		utilruntime.HandleError(err)
+		return
+	}
+	c.queue.Add(key)
 }
 
 func (c *GenericController) startWorker(ctx context.Context) {

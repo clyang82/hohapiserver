@@ -6,7 +6,6 @@ import (
 
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
@@ -24,8 +23,7 @@ type HoHApiServer struct {
 	// contains caches
 	Cache cache.Cache
 
-	client             dynamic.Interface
-	dynInformerFactory dynamicinformer.DynamicSharedInformerFactory
+	client dynamic.Interface
 
 	syncedCh chan struct{}
 }
@@ -104,7 +102,6 @@ func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.dynInformerFactory.Start(ctx.Done())
 
 	// TODO: kubectl explain currently failing on crd resources, but works on apiservices
 	// kubectl get and describe do work, though
