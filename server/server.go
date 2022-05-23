@@ -20,6 +20,7 @@ type HoHApiServer struct {
 	//contains server starting options
 	options *Options
 
+	hostedConfig *rest.Config
 	// contains caches
 	Cache cache.Cache
 
@@ -45,12 +46,12 @@ type preShutdownHookEntry struct {
 }
 
 func NewHoHApiServer(opts *Options, client dynamic.Interface,
-	dynInformerFactory dynamicinformer.DynamicSharedInformerFactory) *HoHApiServer {
+	hostedConfig *rest.Config) *HoHApiServer {
 	return &HoHApiServer{
-		options:            opts,
-		client:             client,
-		dynInformerFactory: dynInformerFactory,
-		syncedCh:           make(chan struct{}),
+		options:      opts,
+		client:       client,
+		hostedConfig: hostedConfig,
+		syncedCh:     make(chan struct{}),
 	}
 }
 
@@ -77,7 +78,7 @@ func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 		return err
 	}
 
-	err := s.CreateCache(ctx, config)
+	err = s.CreateCache(ctx)
 	if err != nil {
 		return err
 	}
