@@ -2,21 +2,22 @@ package controllers
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	toolscache "k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 )
+
+type Controller interface {
+	Reconcile(ctx context.Context, obj interface{}) error
+	Run(ctx context.Context)
+}
 
 type GenericController struct {
 	context context.Context
@@ -26,21 +27,18 @@ type GenericController struct {
 	// informer is used to watch the hosted resources
 	informer cache.Informer
 
-	queue   workqueue.RateLimitingInterface
-	Indexer toolscache.Indexer
-	gvr     schema.GroupVersionResource
+	gvr schema.GroupVersionResource
+
+	Controller
 }
 
 func NewGenericController(ctx context.Context, name string, client dynamic.Interface,
 	gvr schema.GroupVersionResource, informer cache.Informer) *GenericController {
 
-	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name)
-
 	c := &GenericController{
 		context:  ctx,
 		name:     name,
 		client:   client,
-		queue:    queue,
 		gvr:      gvr,
 		informer: informer,
 	}
@@ -48,95 +46,34 @@ func NewGenericController(ctx context.Context, name string, client dynamic.Inter
 	c.informer.AddEventHandler(
 		toolscache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				c.reconcile(c.context, obj)
+				c.Reconcile(c.context, obj)
 			},
 			UpdateFunc: func(_, obj interface{}) {
-				c.Enqueue(obj)
+				c.Reconcile(c.context, obj)
 			},
 			DeleteFunc: func(obj interface{}) {
-				c.Enqueue(obj)
+				c.Reconcile(c.context, obj)
 			},
 		},
 	)
-
 	return c
 }
 
 func (c *GenericController) Run(ctx context.Context, numThreads int) {
-	defer utilruntime.HandleCrash()
-	defer c.queue.ShutDown()
 
 	klog.Infof("Starting %s", c.name)
-	defer klog.Infof("Shutting down %s", c.name)
 
-	for i := 0; i < numThreads; i++ {
-		go wait.UntilWithContext(ctx, c.startWorker, time.Second)
-	}
 	<-ctx.Done()
 }
 
-// enqueue enqueues a resource.
-func (c *GenericController) Enqueue(obj interface{}) {
-	key, err := toolscache.MetaNamespaceKeyFunc(obj)
-	if err != nil {
-		utilruntime.HandleError(err)
-		return
-	}
-	c.queue.Add(key)
-}
-
-func (c *GenericController) startWorker(ctx context.Context) {
-	for c.processNextWorkItem(ctx) {
-	}
-}
-
-func (c *GenericController) processNextWorkItem(ctx context.Context) bool {
-	// Wait until there is a new item in the working queue
-	k, quit := c.queue.Get()
-	if quit {
-		return false
-	}
-	key := k.(string)
-
-	// No matter what, tell the queue we're done with this key, to unblock
-	// other workers.
-	defer c.queue.Done(key)
-
-	if err := c.process(ctx, key); err != nil {
-		utilruntime.HandleError(fmt.Errorf("%q controller failed to sync %q, err: %w", c.name, key, err))
-		c.queue.AddRateLimited(key)
-		return true
-	}
-	c.queue.Forget(key)
-	return true
-}
-
-func (c *GenericController) process(ctx context.Context, key string) error {
-
-	obj, _, err := c.Indexer.GetByKey(key)
-	if err != nil {
-		return err
-	}
-
-	err = c.reconcile(ctx, obj)
-	if err != nil {
-		return err
-	}
-
-	// Regardless of whether reconcile returned an error or not, always try to patch status if needed. Return the
-	// reconciliation error at the end.
-
-	// If the object being reconciled changed as a result, update it.
-	// if !equality.Semantic.DeepEqual(old.Status, obj.Status) {
-
-	// }
-
-	return nil
-}
-
-func (c *GenericController) reconcile(ctx context.Context, obj interface{}) error {
+func (c *GenericController) Reconcile(ctx context.Context, obj interface{}) error {
 	klog.Info("Starting to reconcile the resource")
-	unstructuredObj := obj.(*unstructured.Unstructured)
+
+	tempObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+	unstructuredObj := &unstructured.Unstructured{Object: tempObj}
 
 	//clean up unneeded fields
 	manipulateObj(unstructuredObj)

@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	filteredcache "github.com/IBM/controller-filtered-cache/filteredcache"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/selection"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -28,11 +26,6 @@ const (
 
 func (s *HoHApiServer) CreateCache(ctx context.Context) error {
 
-	localResourceLabelReq, err := labels.NewRequirement(localResourceLabel, selection.DoesNotExist, nil)
-	if err != nil {
-		return err
-	}
-
 	scheme := runtime.NewScheme()
 
 	if err := apiextensionsv1.AddToScheme(scheme); err != nil {
@@ -45,21 +38,34 @@ func (s *HoHApiServer) CreateCache(ctx context.Context) error {
 		return err
 	}
 
-	opts := cache.Options{
-		Scheme: scheme,
-		SelectorsByObject: cache.SelectorsByObject{
-			&apiextensionsv1.CustomResourceDefinition{}: {
-				Field: fields.SelectorFromSet(
-					fields.Set(map[string]string{
-						"metadata.name": "policies.policy.open-cluster-management.io,placementbindings.policy.open-cluster-management.io,placementrules.apps.open-cluster-management.io,managedclusters.cluster.open-cluster-management.io,subscriptionreports.apps.open-cluster-management.io,subscriptions.apps.open-cluster-management.io,subscriptionstatuses.apps.open-cluster-management.io",
-					}))},
-			&policyv1.Policy{}:               {Label: labels.NewSelector().Add(*localResourceLabelReq)},
-			&policyv1.PlacementBinding{}:     {Label: labels.NewSelector().Add(*localResourceLabelReq)},
-			&placementrulev1.PlacementRule{}: {Label: labels.NewSelector().Add(*localResourceLabelReq)},
+	gvkLabelsMap := map[schema.GroupVersionKind][]filteredcache.Selector{
+		apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"): {
+			{FieldSelector: fmt.Sprintf("metadata.name==%s", "policies.policy.open-cluster-management.io")},
+			{FieldSelector: fmt.Sprintf("metadata.name==%s", "placementbindings.policy.open-cluster-management.io")},
+			{FieldSelector: fmt.Sprintf("metadata.name==%s", "placementrules.apps.open-cluster-management.io")},
+			{FieldSelector: fmt.Sprintf("metadata.name==%s", "managedclusters.cluster.open-cluster-management.io")},
+			{FieldSelector: fmt.Sprintf("metadata.name==%s", "subscriptionreports.apps.open-cluster-management.io")},
+			{FieldSelector: fmt.Sprintf("metadata.name==%s", "subscriptions.apps.open-cluster-management.io")},
+			{FieldSelector: fmt.Sprintf("metadata.name==%s", "subscriptionstatuses.apps.open-cluster-management.io")},
+		},
+		policyv1.SchemeGroupVersion.WithKind("Policy"): {
+			{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
+			{LabelSelector: fmt.Sprint("!" + rootPolicyLabel)},
+		},
+		policyv1.SchemeGroupVersion.WithKind("PolicyBinding"): {
+			{LabelSelector: fmt.Sprint("!" + rootPolicyLabel)},
+		},
+		placementrulev1.SchemeGroupVersion.WithKind("PlacementRule"): {
+			{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
 		},
 	}
 
-	s.Cache, err = cache.New(s.hostedConfig, opts)
+	opts := cache.Options{
+		Scheme: scheme,
+	}
+
+	var err error
+	s.Cache, err = filteredcache.NewEnhancedFilteredCacheBuilder(gvkLabelsMap)(s.hostedConfig, opts)
 	if err != nil {
 		return err
 	}

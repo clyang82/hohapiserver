@@ -3,6 +3,7 @@ module github.com/clyang82/hohapiserver
 go 1.17
 
 require (
+	github.com/IBM/controller-filtered-cache v0.3.3
 	github.com/spf13/pflag v1.0.5
 	go.etcd.io/etcd/client/pkg/v3 v3.5.1
 	go.etcd.io/etcd/server/v3 v3.5.0
@@ -41,6 +42,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.20.0 // indirect
 	github.com/go-openapi/swag v0.21.1 // indirect
+	github.com/gobuffalo/flect v0.1.5 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
