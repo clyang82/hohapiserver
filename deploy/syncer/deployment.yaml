@@ -1,0 +1,40 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: hub-of-hubs-syncer
+  labels:
+    app: hub-of-hubs-syncer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hub-of-hubs-syncer
+  template:
+    metadata:
+      labels:
+        app: hub-of-hubs-syncer
+    spec:
+      serviceAccountName: hoh-syncer-sa
+      containers:
+      - args:
+        - "/hohsyncer"
+        - "--from-kubeconfig=/hub-of-hubs-config/kubeconfig"
+        env:
+        name: hub-of-hubs-syncer
+        image: quay.io/clyang82/hub-of-hubs-syncer:latest
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          runAsNonRoot: true
+        volumeMounts:
+        - mountPath: /hub-of-hubs-config
+          name: hub-of-hubs-kubeconfig
+      volumes:
+      - name: hub-of-hubs-kubeconfig
+        secret:
+          defaultMode: 420
+          secretName: hub-of-hubs-kubeconfig
