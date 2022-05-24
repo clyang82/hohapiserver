@@ -15,8 +15,9 @@ import (
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	placementrulev1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/clyang82/hohapiserver/controllers"
+	"github.com/clyang82/hohapiserver/server/controllers"
 )
 
 const (
@@ -50,10 +51,9 @@ func (s *HoHApiServer) CreateCache(ctx context.Context) error {
 		},
 		policyv1.SchemeGroupVersion.WithKind("Policy"): {
 			{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
-			{LabelSelector: fmt.Sprint("!" + rootPolicyLabel)},
 		},
 		policyv1.SchemeGroupVersion.WithKind("PlacementBinding"): {
-			{LabelSelector: fmt.Sprint("!" + rootPolicyLabel)},
+			{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
 		},
 		placementrulev1.SchemeGroupVersion.WithKind("PlacementRule"): {
 			{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
@@ -90,7 +90,8 @@ func (s *HoHApiServer) InstallCRDController(ctx context.Context, config *rest.Co
 	}
 	// configure the dynamic informer event handlers
 	c := controllers.NewGenericController(ctx, controllerName, dynamicClient,
-		apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions"), informer, s.Cache)
+		apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions"), informer, s.Cache,
+		func() client.Object { return &apiextensionsv1.CustomResourceDefinition{} })
 
 	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName), func(hookContext genericapiserver.PostStartHookContext) error {
 		go c.Run(ctx, 1)
@@ -112,7 +113,8 @@ func (s *HoHApiServer) InstallPolicyController(ctx context.Context, config *rest
 		return err
 	}
 	c := controllers.NewGenericController(ctx, controllerName, dynamicClient,
-		policyv1.SchemeGroupVersion.WithResource("policies"), informer, s.Cache)
+		policyv1.SchemeGroupVersion.WithResource("policies"), informer, s.Cache,
+		func() client.Object { return &policyv1.Policy{} })
 
 	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName), func(hookContext genericapiserver.PostStartHookContext) error {
 		go c.Run(ctx, 1)
@@ -134,7 +136,8 @@ func (s *HoHApiServer) InstallPlacementRuleController(ctx context.Context, confi
 		return err
 	}
 	c := controllers.NewGenericController(ctx, controllerName, dynamicClient,
-		placementrulev1.SchemeGroupVersion.WithResource("placementrules"), informer, s.Cache)
+		placementrulev1.SchemeGroupVersion.WithResource("placementrules"), informer, s.Cache,
+		func() client.Object { return &placementrulev1.PlacementRule{} })
 
 	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName), func(hookContext genericapiserver.PostStartHookContext) error {
 		go c.Run(ctx, 1)
@@ -156,7 +159,8 @@ func (s *HoHApiServer) InstallPlacementBindingController(ctx context.Context, co
 		return err
 	}
 	c := controllers.NewGenericController(ctx, controllerName, dynamicClient,
-		policyv1.SchemeGroupVersion.WithResource("placementbindings"), informer, s.Cache)
+		policyv1.SchemeGroupVersion.WithResource("placementbindings"), informer, s.Cache,
+		func() client.Object { return &policyv1.PlacementBinding{} })
 
 	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName), func(hookContext genericapiserver.PostStartHookContext) error {
 		go c.Run(ctx, 1)

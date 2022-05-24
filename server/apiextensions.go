@@ -26,7 +26,7 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 
-	"github.com/clyang82/hohapiserver/etcd"
+	"github.com/clyang82/hohapiserver/server/etcd"
 )
 
 // CreateExtensions creates the Exensions Server.

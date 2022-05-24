@@ -39,21 +39,24 @@ type GenericController struct {
 	queue workqueue.RateLimitingInterface
 	cache cache.Cache
 
+	createInstance func() client.Object
+
 	Controller
 }
 
 func NewGenericController(ctx context.Context, name string, client dynamic.Interface,
-	gvr schema.GroupVersionResource, informer cache.Informer, cache cache.Cache) *GenericController {
+	gvr schema.GroupVersionResource, informer cache.Informer, cache cache.Cache, createInstance func() client.Object) *GenericController {
 
 	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name)
 	c := &GenericController{
-		context:  ctx,
-		name:     name,
-		client:   client,
-		gvr:      gvr,
-		informer: informer,
-		queue:    queue,
-		cache:    cache,
+		context:        ctx,
+		name:           name,
+		client:         client,
+		gvr:            gvr,
+		informer:       informer,
+		queue:          queue,
+		cache:          cache,
+		createInstance: createInstance,
 	}
 
 	c.informer.AddEventHandler(
@@ -129,24 +132,19 @@ func (c *GenericController) process(ctx context.Context, key string) error {
 		klog.Errorf("invalid key: %q: %v", key, err)
 		return nil
 	}
-	var obj client.Object
-	err = c.cache.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, obj)
+
+	klog.V(5).Infof("process object is: %s/%s", namespace, name)
+	instance := c.createInstance()
+	err = c.cache.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, instance)
 	if err != nil {
 		return err
 	}
 
-	err = c.Reconcile(ctx, obj)
+	klog.V(5).Infof("process object is: %v", instance)
+	err = c.Reconcile(ctx, instance)
 	if err != nil {
 		return err
 	}
-
-	// Regardless of whether reconcile returned an error or not, always try to patch status if needed. Return the
-	// reconciliation error at the end.
-
-	// If the object being reconciled changed as a result, update it.
-	// if !equality.Semantic.DeepEqual(old.Status, obj.Status) {
-
-	// }
 
 	return nil
 }

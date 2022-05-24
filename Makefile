@@ -8,7 +8,8 @@ docker:
 	docker build ./ --tag hohapiserver:latest
 
 build:
-	CGO_ENABLED=0 go build -o hohapiserver ./cmd/main.go
+	CGO_ENABLED=0 go build -o hohapiserver ./cmd/server/main.go
+	CGO_ENABLED=0 go build -o hohsyncer ./cmd/syncer/main.go
 
 fix:
 	go fix ./...

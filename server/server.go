@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
-	"github.com/clyang82/hohapiserver/etcd"
+	"github.com/clyang82/hohapiserver/server/etcd"
 )
 
 type HoHApiServer struct {

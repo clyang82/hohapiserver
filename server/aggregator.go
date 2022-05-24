@@ -35,7 +35,7 @@ import (
 	aggregatoropenapi "k8s.io/kube-aggregator/pkg/generated/openapi"
 	"k8s.io/kube-openapi/pkg/common"
 
-	"github.com/clyang82/hohapiserver/controllers/crdregistration"
+	"github.com/clyang82/hohapiserver/server/controllers/crdregistration"
 )
 
 // priority defines group priority that is used in discovery. This controls
