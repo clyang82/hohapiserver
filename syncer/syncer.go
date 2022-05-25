@@ -77,7 +77,10 @@ type Controller struct {
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
 func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Controller, error) {
-	controllerName := string(direction) + "--hoh--leaf-hub"
+	controllerName := string(direction) + "--hoh--leafhub"
+	if direction == SyncDown {
+		controllerName = string(direction) + "--leafhub--hoh"
+	}
 	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "hoh-"+controllerName)
 
 	c := Controller{
@@ -98,9 +101,11 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 		metav1.NamespaceAll, func(o *metav1.ListOptions) {
 		})
 
-	gvrs := []string{"policies.policy.open-cluster-management.io",
-		"placementbindings.policy.open-cluster-management.io",
-		"placementrules.apps.open-cluster-management.io"}
+	gvrs := []string{
+		"policies.v1.policy.open-cluster-management.io",
+		"placementbindings.v1.policy.open-cluster-management.io",
+		"placementrules.v1.apps.open-cluster-management.io",
+	}
 
 	for _, gvrstr := range gvrs {
 		gvr, _ := schema.ParseResourceArg(gvrstr)

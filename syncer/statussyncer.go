@@ -69,10 +69,10 @@ func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.Grou
 
 	upstreamObj.SetResourceVersion(existing.GetResourceVersion())
 	if _, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).UpdateStatus(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
-		klog.Errorf("Failed updating status of resource %s/%s from pcluster namespace %s: %v", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace(), err)
+		klog.Errorf("Failed updating status of resource %s/%s from leaf hub cluster namespace %s: %v", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace(), err)
 		return err
 	}
-	klog.Infof("Updated status of resource %s/%s from pcluster namespace %s", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace())
+	klog.Infof("Updated status of resource %s/%s from leaf hub cluster namespace %s", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace())
 
 	return nil
 }
