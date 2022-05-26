@@ -117,6 +117,7 @@ func (c *Controller) applyToDownstream(ctx context.Context, gvr schema.GroupVers
 	downstreamObj.SetResourceVersion("")
 	downstreamObj.SetNamespace(downstreamNamespace)
 	downstreamObj.SetManagedFields(nil)
+	downstreamObj.SetClusterName("")
 	// Deletion fields are immutable and set by the downstream API server
 	downstreamObj.SetDeletionTimestamp(nil)
 	downstreamObj.SetDeletionGracePeriodSeconds(nil)

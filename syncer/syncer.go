@@ -73,6 +73,8 @@ type Controller struct {
 	upsertFn  UpsertFunc
 	deleteFn  DeleteFunc
 	direction SyncDirection
+
+	gvrs []string
 }
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
@@ -93,21 +95,25 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 	if direction == SyncDown {
 		c.upsertFn = c.applyToDownstream
 		c.deleteFn = c.deleteFromDownstream
+		c.gvrs = []string{
+			"policies.v1.policy.open-cluster-management.io",
+			"placementbindings.v1.policy.open-cluster-management.io",
+			"placementrules.v1.apps.open-cluster-management.io",
+		}
 	} else {
 		c.upsertFn = c.updateStatusInUpstream
+		c.gvrs = []string{
+			"policies.v1.policy.open-cluster-management.io",
+			"managedclusters.v1.cluster.open-cluster-management.io",
+			"placementrules.v1.apps.open-cluster-management.io",
+		}
 	}
 
 	fromInformers := dynamicinformer.NewFilteredDynamicSharedInformerFactory(fromClient, resyncPeriod,
 		metav1.NamespaceAll, func(o *metav1.ListOptions) {
 		})
 
-	gvrs := []string{
-		"policies.v1.policy.open-cluster-management.io",
-		"placementbindings.v1.policy.open-cluster-management.io",
-		"placementrules.v1.apps.open-cluster-management.io",
-	}
-
-	for _, gvrstr := range gvrs {
+	for _, gvrstr := range c.gvrs {
 		gvr, _ := schema.ParseResourceArg(gvrstr)
 
 		fromInformers.ForResource(*gvr).Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
