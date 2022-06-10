@@ -79,9 +79,9 @@ type Controller struct {
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
 func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Controller, error) {
-	controllerName := string(direction) + "--hoh--leafhub"
+	controllerName := string(direction) + "--leafhub--hoh"
 	if direction == SyncDown {
-		controllerName = string(direction) + "--leafhub--hoh"
+		controllerName = string(direction) + "--hoh--leafhub"
 	}
 	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "hoh-"+controllerName)
 
@@ -111,6 +111,7 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 
 	fromInformers := dynamicinformer.NewFilteredDynamicSharedInformerFactory(fromClient, resyncPeriod,
 		metav1.NamespaceAll, func(o *metav1.ListOptions) {
+			o.LabelSelector = fmt.Sprintf("!%s", "policy.open-cluster-management.io/root-policy")
 		})
 
 	for _, gvrstr := range c.gvrs {
@@ -226,14 +227,16 @@ func (c *Controller) process(ctx context.Context, h holder) error {
 
 	key := h.name
 
-	key = h.namespace + "/" + key
+	if len(h.namespace) > 0 {
+		key = h.namespace + "/" + h.name
+	}
 
 	obj, exists, err := c.fromInformers.ForResource(h.gvr).Informer().GetIndexer().GetByKey(key)
 	if err != nil {
 		return err
 	}
 
-	if !exists {
+	if c.direction == SyncDown && !exists {
 		klog.InfoS("Object doesn't exist:", "direction", c.direction, "namespace", h.namespace, "name", h.name)
 		if c.deleteFn != nil {
 			return c.deleteFn(ctx, h.gvr, h.namespace, h.name)
