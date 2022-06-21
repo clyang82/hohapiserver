@@ -60,8 +60,12 @@ func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 	// }
 
 	etcdConfig, err := endpoint.Listen(ctx, endpoint.Config{
-		Endpoint: "postgresql://hoh-process-user:pGFCVv%40uP%5BQgE7fr%28%5EQ%7B6%3C5%29@hoh-pgbouncer.hoh-postgres.svc:5432/experimental",
+		Listener: "http://localhost:2379",
+		Endpoint: "postgres://hoh-process-user:pGFCVv%40uP%5BQgE7fr%28%5EQ%7B6%3C5%29@hoh-pgbouncer.hoh-postgres.svc:5432/experimental",
 	})
+	if err != nil {
+		return err
+	}
 
 	genericConfig, genericEtcdOptions, extensionServer, err := CreateExtensions(s.options, etcdConfig)
 	if err != nil {
@@ -84,12 +88,12 @@ func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 		return err
 	}
 
-	// controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
+	controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
 
-	// err = s.InstallCRDController(ctx, controllerConfig)
-	// if err != nil {
-	// 	return err
-	// }
+	err = s.InstallCRDController(ctx, controllerConfig)
+	if err != nil {
+		return err
+	}
 
 	// err = s.InstallPolicyController(ctx, controllerConfig)
 	// if err != nil {
@@ -151,20 +155,3 @@ func (s *HoHApiServer) AddPreShutdownHook(name string, hook genericapiserver.Pre
 // 		return nil
 // 	}
 // }
-
-// startStorage starts the kine listener and configures the endpoints, if necessary.
-// This calls into the kine endpoint code, which sets up the database client
-// and unix domain socket listener if using an external database. In the case of an etcd
-// backend it just returns the user-provided etcd endpoints and tls config.
-func (s *HoHApiServer) startStorage(ctx context.Context) (endpoint.ETCDConfig, error) {
-
-	// start listening on the kine socket as an etcd endpoint, or return the external etcd endpoints
-
-	// // Persist the returned etcd configuration. We decide if we're doing leader election for embedded controllers
-	// // based on what the kine wrapper tells us about the datastore. Single-node datastores like sqlite don't require
-	// // leader election, while basically all others (etcd, external database, etc) do since they allow multiple servers.
-	// c.config.Runtime.EtcdConfig = etcdConfig
-	// c.config.Datastore.BackendTLSConfig = etcdConfig.TLSConfig
-	// c.config.Datastore.Endpoint = strings.Join(etcdConfig.Endpoints, ",")
-	// c.config.NoLeaderElect = !etcdConfig.LeaderElect
-}

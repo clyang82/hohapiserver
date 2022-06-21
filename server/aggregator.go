@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsapiserver "k8s.io/apiextensions-apiserver/pkg/apiserver"
 	apiextensionsinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apiextensionsopenapi "k8s.io/apiextensions-apiserver/pkg/generated/openapi"
@@ -140,7 +141,7 @@ func CreateAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 			// let the CRD controller process the initial set of CRDs before starting the autoregistration controller.
 			// this prevents the autoregistration controller's initial sync from deleting APIServices for CRDs that still exist.
 			// we only need to do this if CRDs are enabled on this server.  We can't use discovery because we are the source for discovery.
-			if aggregatorConfig.GenericConfig.MergedResourceConfig.AnyVersionForGroupEnabled("apiextensions.k8s.io") {
+			if aggregatorConfig.GenericConfig.MergedResourceConfig.ResourceEnabled(apiextensionsv1.SchemeGroupVersion.WithResource("apiextensions.k8s.io")) {
 				crdRegistrationController.WaitForInitialSync()
 			}
 			autoRegistrationController.Run(5, context.StopCh)
