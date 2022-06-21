@@ -21,21 +21,20 @@ import (
 	"net"
 	"os"
 
+	"github.com/k3s-io/kine/pkg/endpoint"
 	apiextensionsapiserver "k8s.io/apiextensions-apiserver/pkg/apiserver"
 	apiextensionsserveroptions "k8s.io/apiextensions-apiserver/pkg/cmd/server/options"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
-
-	"github.com/clyang82/hohapiserver/server/etcd"
 )
 
 // CreateExtensions creates the Exensions Server.
-func CreateExtensions(opts *Options, clientInfo etcd.ClientInfo) (genericapiserver.Config, genericoptions.EtcdOptions, *apiextensionsapiserver.CustomResourceDefinitions, error) {
+func CreateExtensions(opts *Options, endpointConfig endpoint.ETCDConfig) (genericapiserver.Config, genericoptions.EtcdOptions, *apiextensionsapiserver.CustomResourceDefinitions, error) {
 	o := apiextensionsserveroptions.NewCustomResourceDefinitionsServerOptions(os.Stdout, os.Stderr)
-	o.RecommendedOptions.Etcd.StorageConfig.Transport.ServerList = clientInfo.Endpoints
-	o.RecommendedOptions.Etcd.StorageConfig.Transport.KeyFile = clientInfo.KeyFile
-	o.RecommendedOptions.Etcd.StorageConfig.Transport.CertFile = clientInfo.CertFile
-	o.RecommendedOptions.Etcd.StorageConfig.Transport.TrustedCAFile = clientInfo.TrustedCAFile
+	o.RecommendedOptions.Etcd.StorageConfig.Transport.ServerList = endpointConfig.Endpoints
+	o.RecommendedOptions.Etcd.StorageConfig.Transport.KeyFile = endpointConfig.TLSConfig.KeyFile
+	o.RecommendedOptions.Etcd.StorageConfig.Transport.CertFile = endpointConfig.TLSConfig.CertFile
+	o.RecommendedOptions.Etcd.StorageConfig.Transport.TrustedCAFile = endpointConfig.TLSConfig.CAFile
 
 	o.RecommendedOptions.SecureServing = opts.SecureServing
 	o.RecommendedOptions.Authentication.RemoteKubeConfigFileOptional = true

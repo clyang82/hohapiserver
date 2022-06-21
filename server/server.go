@@ -2,14 +2,12 @@ package server
 
 import (
 	"context"
-	"errors"
 
+	"github.com/k3s-io/kine/pkg/endpoint"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-
-	"github.com/clyang82/hohapiserver/server/etcd"
 )
 
 type HoHApiServer struct {
@@ -56,11 +54,16 @@ func NewHoHApiServer(opts *Options, client dynamic.Interface,
 // RunHoHApiServer starts a new HoHApiServer.
 func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 
-	embeddedClientInfo, err := etcd.Run(context.TODO(), "2380", "2379")
-	if err != nil {
-		return err
-	}
-	genericConfig, genericEtcdOptions, extensionServer, err := CreateExtensions(s.options, embeddedClientInfo)
+	// embeddedClientInfo, err := etcd.Run(context.TODO(), "2380", "2379")
+	// if err != nil {
+	// 	return err
+	// }
+
+	etcdConfig, err := endpoint.Listen(ctx, endpoint.Config{
+		Endpoint: "postgresql://hoh-process-user:pGFCVv%40uP%5BQgE7fr%28%5EQ%7B6%3C5%29@hoh-pgbouncer.hoh-postgres.svc:5432/experimental",
+	})
+
+	genericConfig, genericEtcdOptions, extensionServer, err := CreateExtensions(s.options, etcdConfig)
 	if err != nil {
 		return err
 	}
@@ -81,27 +84,27 @@ func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 		return err
 	}
 
-	controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
+	// controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
 
-	err = s.InstallCRDController(ctx, controllerConfig)
-	if err != nil {
-		return err
-	}
+	// err = s.InstallCRDController(ctx, controllerConfig)
+	// if err != nil {
+	// 	return err
+	// }
 
-	err = s.InstallPolicyController(ctx, controllerConfig)
-	if err != nil {
-		return err
-	}
+	// err = s.InstallPolicyController(ctx, controllerConfig)
+	// if err != nil {
+	// 	return err
+	// }
 
-	err = s.InstallPlacementRuleController(ctx, controllerConfig)
-	if err != nil {
-		return err
-	}
+	// err = s.InstallPlacementRuleController(ctx, controllerConfig)
+	// if err != nil {
+	// 	return err
+	// }
 
-	err = s.InstallPlacementBindingController(ctx, controllerConfig)
-	if err != nil {
-		return err
-	}
+	// err = s.InstallPlacementBindingController(ctx, controllerConfig)
+	// if err != nil {
+	// 	return err
+	// }
 
 	// TODO: kubectl explain currently failing on crd resources, but works on apiservices
 	// kubectl get and describe do work, though
@@ -137,14 +140,31 @@ func (s *HoHApiServer) AddPreShutdownHook(name string, hook genericapiserver.Pre
 	})
 }
 
-func (s *HoHApiServer) waitForSync(stop <-chan struct{}) error {
-	// Wait for shared informer factories to by synced.
-	// factory. Otherwise, informer list calls may go into backoff (before the CRDs are ready) and
-	// take ~10 seconds to succeed.
-	select {
-	case <-stop:
-		return errors.New("timed out waiting for informers to sync")
-	case <-s.syncedCh:
-		return nil
-	}
+// func (s *HoHApiServer) waitForSync(stop <-chan struct{}) error {
+// 	// Wait for shared informer factories to by synced.
+// 	// factory. Otherwise, informer list calls may go into backoff (before the CRDs are ready) and
+// 	// take ~10 seconds to succeed.
+// 	select {
+// 	case <-stop:
+// 		return errors.New("timed out waiting for informers to sync")
+// 	case <-s.syncedCh:
+// 		return nil
+// 	}
+// }
+
+// startStorage starts the kine listener and configures the endpoints, if necessary.
+// This calls into the kine endpoint code, which sets up the database client
+// and unix domain socket listener if using an external database. In the case of an etcd
+// backend it just returns the user-provided etcd endpoints and tls config.
+func (s *HoHApiServer) startStorage(ctx context.Context) (endpoint.ETCDConfig, error) {
+
+	// start listening on the kine socket as an etcd endpoint, or return the external etcd endpoints
+
+	// // Persist the returned etcd configuration. We decide if we're doing leader election for embedded controllers
+	// // based on what the kine wrapper tells us about the datastore. Single-node datastores like sqlite don't require
+	// // leader election, while basically all others (etcd, external database, etc) do since they allow multiple servers.
+	// c.config.Runtime.EtcdConfig = etcdConfig
+	// c.config.Datastore.BackendTLSConfig = etcdConfig.TLSConfig
+	// c.config.Datastore.Endpoint = strings.Join(etcdConfig.Endpoints, ",")
+	// c.config.NoLeaderElect = !etcdConfig.LeaderElect
 }
