@@ -58,17 +58,40 @@ func CreateExtensions(opts *Options, endpointConfig endpoint.ETCDConfig) (generi
 	o.RecommendedOptions.CoreAPI = genericoptions.NewCoreAPIOptions()
 	o.RecommendedOptions.Admission = nil
 
+	genericConfig := genericapiserver.NewConfig(serializer.NewCodecFactory(runtime.NewScheme()))
+	genericConfig.MergedResourceConfig = DefaultAPIResourceConfigSource()
+	if err := o.ServerRunOptions.ApplyTo(genericConfig); err != nil {
+		return *genericConfig, *o.RecommendedOptions.Etcd, nil, err
+	}
+	if err := o.RecommendedOptions.SecureServing.ApplyTo(&genericConfig.SecureServing, &genericConfig.LoopbackClientConfig); err != nil {
+		return *genericConfig, *o.RecommendedOptions.Etcd, nil, err
+	}
+	if err := o.APIEnablement.ApplyTo(genericConfig, genericConfig.MergedResourceConfig, runtime.NewScheme()); err != nil {
+		return *genericConfig, *o.RecommendedOptions.Etcd, nil, err
+	}
+
+	apiserverconfig := &apiextensionsapiserver.Config{
+		GenericConfig: &genericapiserver.RecommendedConfig{
+			Config: *genericConfig,
+			//SharedInformerFactory: externalInformers,
+		},
+		ExtraConfig: apiextensionsapiserver.ExtraConfig{
+			CRDRESTOptionsGetter: apiextensionsserveroptions.NewCRDRESTOptionsGetter(*o.RecommendedOptions.Etcd),
+			MasterCount:          1,
+		},
+	}
+
 	if err := o.Complete(); err != nil {
-		return genericapiserver.Config{}, *o.RecommendedOptions.Etcd, nil, err
+		return *genericConfig, *o.RecommendedOptions.Etcd, nil, err
 	}
 
 	if err := o.Validate(); err != nil {
-		return genericapiserver.Config{}, *o.RecommendedOptions.Etcd, nil, err
+		return *genericConfig, *o.RecommendedOptions.Etcd, nil, err
 	}
 
 	// TODO have a "real" external address
 	if err := o.RecommendedOptions.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{net.ParseIP("127.0.0.1")}); err != nil {
-		return genericapiserver.Config{}, *o.RecommendedOptions.Etcd, nil, fmt.Errorf("error creating self-signed certificates: %w", err)
+		return *genericConfig, *o.RecommendedOptions.Etcd, nil, fmt.Errorf("error creating self-signed certificates: %w", err)
 	}
 
 	serverConfig := genericapiserver.NewRecommendedConfig(apiextensionsapiserver.Codecs)
@@ -91,20 +114,6 @@ func CreateExtensions(opts *Options, endpointConfig endpoint.ETCDConfig) (generi
 	apiextensionserver, err := apiextensionconfig.Complete().New(genericapiserver.NewEmptyDelegate())
 	if err != nil {
 		return serverConfig.Config, *o.RecommendedOptions.Etcd, nil, err
-	}
-
-	genericConfig := genericapiserver.NewConfig(serializer.NewCodecFactory(runtime.NewScheme()))
-	genericConfig.MergedResourceConfig = DefaultAPIResourceConfigSource()
-
-	apiserverconfig := &apiextensionsapiserver.Config{
-		GenericConfig: &genericapiserver.RecommendedConfig{
-			Config: *genericConfig,
-			//SharedInformerFactory: externalInformers,
-		},
-		ExtraConfig: apiextensionsapiserver.ExtraConfig{
-			CRDRESTOptionsGetter: apiextensionsserveroptions.NewCRDRESTOptionsGetter(*o.RecommendedOptions.Etcd),
-			MasterCount:          1,
-		},
 	}
 
 	kubeAPIServer, err := apiserverconfig.Complete().New(apiextensionserver.GenericAPIServer)

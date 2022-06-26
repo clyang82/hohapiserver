@@ -14,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/sets"
 	openapinamer "k8s.io/apiserver/pkg/endpoints/openapi"
 	genericapiserver "k8s.io/apiserver/pkg/server"
@@ -153,13 +152,13 @@ func CreateAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 		return nil, err
 	}
 
-	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo("", runtime.NewScheme(),
-		metav1.ParameterCodec, serializer.NewCodecFactory(runtime.NewScheme()))
+	// apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo("", runtime.NewScheme(),
+	// 	metav1.ParameterCodec, serializer.NewCodecFactory(runtime.NewScheme()))
 
-	err = aggregatorServer.GenericAPIServer.InstallAPIGroup(&apiGroupInfo)
-	if err != nil {
-		return nil, err
-	}
+	// err = aggregatorServer.GenericAPIServer.InstallAPIGroup(&apiGroupInfo)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	err = aggregatorServer.GenericAPIServer.AddBootSequenceHealthChecks(
 		makeAPIServiceAvailableHealthCheck(
