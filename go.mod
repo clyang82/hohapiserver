@@ -5,7 +5,6 @@ go 1.17
 require (
 	github.com/IBM/controller-filtered-cache v0.3.3
 	github.com/k3s-io/kine v0.9.1
-	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/pflag v1.0.5
 	go.etcd.io/etcd/client/pkg/v3 v3.5.1
@@ -86,6 +85,7 @@ require (
 	github.com/nats-io/nats.go v1.13.1-0.20220318132711-e0e03e374228 // indirect
 	github.com/nats-io/nkeys v0.3.0 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.12.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.34.0 // indirect

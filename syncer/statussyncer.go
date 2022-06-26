@@ -1,24 +1,10 @@
-/*
-Copyright 2021 The KCP Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package syncer
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -60,32 +46,45 @@ func NewStatusSyncer(from, to *rest.Config) (*Controller, error) {
 }
 
 func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured) error {
-	upstreamObj := downstreamObj.DeepCopy()
-	upstreamObj.SetUID("")
-	upstreamObj.SetResourceVersion("")
-	upstreamObj.SetNamespace(upstreamNamespace)
+	for i := 1; i <= 100000; i++ {
+		upstreamObj := downstreamObj.DeepCopy()
+		upstreamObj.SetUID("")
+		upstreamObj.SetResourceVersion("")
+		upstreamObj.SetNamespace(upstreamNamespace)
+		upstreamObj.SetName(fmt.Sprintf("%s-%v", upstreamObj.GetName(), i))
 
-	existing, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).Get(ctx, upstreamObj.GetName(), metav1.GetOptions{})
-	if err != nil {
-		if gvr.Resource == "managedclusters" && errors.IsNotFound(err) {
-			c.applyToUpstream(ctx, gvr, upstreamNamespace, downstreamObj)
+		var existing *unstructured.Unstructured
+		var err error
+		for {
+			existing, err = c.toClient.Resource(gvr).Namespace(upstreamNamespace).Get(ctx, upstreamObj.GetName(), metav1.GetOptions{})
+			if err != nil {
+				if gvr.Resource == "managedclusters" && errors.IsNotFound(err) {
+					_, err = c.applyToUpstream(ctx, gvr, upstreamNamespace, downstreamObj)
+					if err != nil {
+						klog.Infof("Error upserting %s %s from downstream %s: %v", gvr.Resource, upstreamObj.GetName(), downstreamObj.GetName(), err)
+						time.Sleep(time.Second)
+					}
+				} else {
+					klog.Errorf("Getting resource %s/%s: %v", upstreamNamespace, upstreamObj.GetName(), err)
+					break
+				}
+			} else {
+				break
+			}
 		}
-		klog.Errorf("Getting resource %s/%s: %v", upstreamNamespace, upstreamObj.GetName(), err)
-		return err
-	}
 
-	upstreamObj.SetResourceVersion(existing.GetResourceVersion())
-	if _, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).UpdateStatus(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
-		klog.Errorf("Failed updating status of resource %s/%s from leaf hub cluster namespace %s: %v", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace(), err)
-		return err
+		upstreamObj.SetResourceVersion(existing.GetResourceVersion())
+		if _, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).UpdateStatus(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
+			klog.Errorf("Failed updating status of resource %s/%s from leaf hub cluster namespace %s: %v", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace(), err)
+			return err
+		}
+		klog.Infof("Updated status of resource %s/%s from leaf hub cluster namespace %s", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace())
 	}
-	klog.Infof("Updated status of resource %s/%s from leaf hub cluster namespace %s", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace())
-
 	return nil
 }
 
 // applyToUpstream is used to apply managedclusters to upstream
-func (c *Controller) applyToUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured) error {
+func (c *Controller) applyToUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 
 	upstreamObj := downstreamObj.DeepCopy()
 	upstreamObj.SetUID("")
@@ -104,14 +103,8 @@ func (c *Controller) applyToUpstream(ctx context.Context, gvr schema.GroupVersio
 	// Marshalling the unstructured object is good enough as SSA patch
 	data, err := json.Marshal(upstreamObj)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if _, err := c.toClient.Resource(gvr).Patch(ctx, upstreamObj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{FieldManager: syncerApplyManager, Force: pointer.Bool(true)}); err != nil {
-		klog.Infof("Error upserting %s %s from downstream %s: %v", gvr.Resource, upstreamObj.GetName(), downstreamObj.GetName(), err)
-		return err
-	}
-	klog.Infof("Upserted %s %s from upstream %s", gvr.Resource, upstreamObj.GetName(), downstreamObj.GetName())
-
-	return nil
+	return c.toClient.Resource(gvr).Patch(ctx, upstreamObj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{FieldManager: syncerApplyManager, Force: pointer.Bool(true)})
 }

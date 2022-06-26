@@ -22,11 +22,25 @@ import (
 	"os"
 
 	"github.com/k3s-io/kine/pkg/endpoint"
+	apiv1 "k8s.io/api/core/v1"
 	apiextensionsapiserver "k8s.io/apiextensions-apiserver/pkg/apiserver"
 	apiextensionsserveroptions "k8s.io/apiextensions-apiserver/pkg/cmd/server/options"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
+	serverstorage "k8s.io/apiserver/pkg/server/storage"
 )
+
+// DefaultAPIResourceConfigSource returns default configuration for an APIResource.
+func DefaultAPIResourceConfigSource() *serverstorage.ResourceConfig {
+	ret := serverstorage.NewResourceConfig()
+	// NOTE: GroupVersions listed here will be enabled by default. Don't put alpha or beta versions in the list.
+	ret.EnableVersions([]schema.GroupVersion{
+		apiv1.SchemeGroupVersion}...)
+	return ret
+}
 
 // CreateExtensions creates the Exensions Server.
 func CreateExtensions(opts *Options, endpointConfig endpoint.ETCDConfig) (genericapiserver.Config, genericoptions.EtcdOptions, *apiextensionsapiserver.CustomResourceDefinitions, error) {
@@ -41,7 +55,7 @@ func CreateExtensions(opts *Options, endpointConfig endpoint.ETCDConfig) (generi
 	o.RecommendedOptions.Authorization.RemoteKubeConfigFileOptional = true
 	o.RecommendedOptions.Authorization.AlwaysAllowPaths = []string{"*"}
 	o.RecommendedOptions.Authorization.AlwaysAllowGroups = []string{"system:unauthenticated"}
-	o.RecommendedOptions.CoreAPI = nil
+	o.RecommendedOptions.CoreAPI = genericoptions.NewCoreAPIOptions()
 	o.RecommendedOptions.Admission = nil
 
 	if err := o.Complete(); err != nil {
@@ -66,7 +80,7 @@ func CreateExtensions(opts *Options, endpointConfig endpoint.ETCDConfig) (generi
 		return serverConfig.Config, *o.RecommendedOptions.Etcd, nil, err
 	}
 
-	config := &apiextensionsapiserver.Config{
+	apiextensionconfig := &apiextensionsapiserver.Config{
 		GenericConfig: serverConfig,
 		ExtraConfig: apiextensionsapiserver.ExtraConfig{
 			CRDRESTOptionsGetter: apiextensionsserveroptions.NewCRDRESTOptionsGetter(*o.RecommendedOptions.Etcd),
@@ -74,10 +88,29 @@ func CreateExtensions(opts *Options, endpointConfig endpoint.ETCDConfig) (generi
 		},
 	}
 
-	server, err := config.Complete().New(genericapiserver.NewEmptyDelegate())
+	apiextensionserver, err := apiextensionconfig.Complete().New(genericapiserver.NewEmptyDelegate())
 	if err != nil {
 		return serverConfig.Config, *o.RecommendedOptions.Etcd, nil, err
 	}
 
-	return serverConfig.Config, *o.RecommendedOptions.Etcd, server, nil
+	genericConfig := genericapiserver.NewConfig(serializer.NewCodecFactory(runtime.NewScheme()))
+	genericConfig.MergedResourceConfig = DefaultAPIResourceConfigSource()
+
+	apiserverconfig := &apiextensionsapiserver.Config{
+		GenericConfig: &genericapiserver.RecommendedConfig{
+			Config: *genericConfig,
+			//SharedInformerFactory: externalInformers,
+		},
+		ExtraConfig: apiextensionsapiserver.ExtraConfig{
+			CRDRESTOptionsGetter: apiextensionsserveroptions.NewCRDRESTOptionsGetter(*o.RecommendedOptions.Etcd),
+			MasterCount:          1,
+		},
+	}
+
+	kubeAPIServer, err := apiserverconfig.Complete().New(apiextensionserver.GenericAPIServer)
+	if err != nil {
+		return serverConfig.Config, *o.RecommendedOptions.Etcd, nil, err
+	}
+
+	return serverConfig.Config, *o.RecommendedOptions.Etcd, kubeAPIServer, nil
 }
