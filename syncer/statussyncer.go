@@ -45,7 +45,7 @@ func deepEqualStatus(oldObj, newObj interface{}) bool {
 	return equality.Semantic.DeepEqual(oldStatus, newStatus)
 }
 
-const statusSyncerAgent = "hoh#status-syncer/v0.0.0"
+const statusSyncerAgent = "globalhub#status-syncer/v0.0.0"
 
 func NewStatusSyncer(from, to *rest.Config) (*Controller, error) {
 	from = rest.CopyConfig(from)

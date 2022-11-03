@@ -1,27 +1,27 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: hub-of-hubs-syncer
+  name: multicluster-global-hub-syncer
   labels:
-    app: hub-of-hubs-syncer
+    app: multicluster-global-hub-syncer
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: hub-of-hubs-syncer
+      app: multicluster-global-hub-syncer
   template:
     metadata:
       labels:
-        app: hub-of-hubs-syncer
+        app: multicluster-global-hub-syncer
     spec:
-      serviceAccountName: hoh-syncer-sa
+      serviceAccountName: multicluster-global-hub-syncer-sa
       containers:
       - args:
-        - "/hohsyncer"
-        - "--from-kubeconfig=/hub-of-hubs-config/kubeconfig"
+        - "/syncer"
+        - "--from-kubeconfig=/multicluster-global-hub-config/kubeconfig"
         env:
-        name: hub-of-hubs-syncer
-        image: quay.io/clyang82/hub-of-hubs-syncer:latest
+        name: multicluster-global-hub-syncer
+        image: quay.io/clyang82/multicluster-global-hub-syncer:latest
         imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
@@ -31,10 +31,10 @@ spec:
           privileged: false
           runAsNonRoot: true
         volumeMounts:
-        - mountPath: /hub-of-hubs-config
-          name: hub-of-hubs-kubeconfig
+        - mountPath: /multicluster-global-hub-config
+          name: multicluster-global-hub-kubeconfig
       volumes:
-      - name: hub-of-hubs-kubeconfig
+      - name: multicluster-global-hub-kubeconfig
         secret:
           defaultMode: 420
-          secretName: hub-of-hubs-kubeconfig
+          secretName: multicluster-global-hub-kubeconfig

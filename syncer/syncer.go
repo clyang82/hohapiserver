@@ -26,10 +26,10 @@ const (
 	resyncPeriod       = 10 * time.Hour
 	syncerApplyManager = "syncer"
 
-	// SyncDown indicates a syncer watches resources on HoH and applies the spec to the leaf cluster
+	// SyncDown indicates a syncer watches resources on the global hub and applies the spec to the leaf cluster
 	SyncDown SyncDirection = "down"
 
-	// SyncUp indicates a syncer watches resources on the leaft cluster and applies the status to HoH
+	// SyncUp indicates a syncer watches resources on the leaft cluster and applies the status to the global hub
 	SyncUp SyncDirection = "up"
 )
 
@@ -79,11 +79,11 @@ type Controller struct {
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
 func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Controller, error) {
-	controllerName := string(direction) + "--leafhub--hoh"
+	controllerName := string(direction) + "--regionl-hub-->global-hub"
 	if direction == SyncDown {
-		controllerName = string(direction) + "--hoh--leafhub"
+		controllerName = string(direction) + "--global-hub-->regionl-hub"
 	}
-	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "hoh-"+controllerName)
+	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "globalhub-"+controllerName)
 
 	c := Controller{
 		name:      controllerName,

@@ -43,7 +43,7 @@ func deepEqualApartFromStatus(oldObj, newObj interface{}) bool {
 	return true
 }
 
-const specSyncerAgent = "hoh#spec-syncer/v0.0.0"
+const specSyncerAgent = "globalhub#spec-syncer/v0.0.0"
 
 func NewSpecSyncer(from, to *rest.Config) (*Controller, error) {
 	from = rest.CopyConfig(from)

@@ -17,15 +17,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/clyang82/hohapiserver/server/controllers"
+	"github.com/clyang82/multicluster-global-hub-lite/server/controllers"
 )
 
 const (
 	rootPolicyLabel    = "policy.open-cluster-management.io/root-policy"
-	localResourceLabel = "hub-of-hubs.open-cluster-management.io/local-resource"
+	localResourceLabel = "multicluster-global-hub.open-cluster-management.io/local-resource"
 )
 
-func (s *HoHApiServer) CreateCache(ctx context.Context) error {
+func (s *GlobalHubApiServer) CreateCache(ctx context.Context) error {
 
 	scheme := runtime.NewScheme()
 
@@ -78,9 +78,9 @@ func (s *HoHApiServer) CreateCache(ctx context.Context) error {
 	return nil
 }
 
-func (s *HoHApiServer) InstallCRDController(ctx context.Context, config *rest.Config) error {
+func (s *GlobalHubApiServer) InstallCRDController(ctx context.Context, config *rest.Config) error {
 
-	controllerName := "hoh-crd-controller"
+	controllerName := "global-hub-crd-controller"
 	config = rest.AddUserAgent(rest.CopyConfig(config), controllerName)
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
@@ -103,8 +103,8 @@ func (s *HoHApiServer) InstallCRDController(ctx context.Context, config *rest.Co
 	return nil
 }
 
-func (s *HoHApiServer) InstallPolicyController(ctx context.Context, config *rest.Config) error {
-	controllerName := "hoh-policy-controller"
+func (s *GlobalHubApiServer) InstallPolicyController(ctx context.Context, config *rest.Config) error {
+	controllerName := "global-hub-policy-controller"
 	config = rest.AddUserAgent(rest.CopyConfig(config), controllerName)
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
@@ -126,8 +126,8 @@ func (s *HoHApiServer) InstallPolicyController(ctx context.Context, config *rest
 	return nil
 }
 
-func (s *HoHApiServer) InstallPlacementRuleController(ctx context.Context, config *rest.Config) error {
-	controllerName := "hoh-placementrule-controller"
+func (s *GlobalHubApiServer) InstallPlacementRuleController(ctx context.Context, config *rest.Config) error {
+	controllerName := "global-hub-placementrule-controller"
 	config = rest.AddUserAgent(rest.CopyConfig(config), controllerName)
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
@@ -149,9 +149,9 @@ func (s *HoHApiServer) InstallPlacementRuleController(ctx context.Context, confi
 	return nil
 }
 
-func (s *HoHApiServer) InstallPlacementBindingController(ctx context.Context, config *rest.Config) error {
-	controllerName := "hoh-placementbinding-controller"
-	config = rest.AddUserAgent(rest.CopyConfig(config), "hoh-placementbinding")
+func (s *GlobalHubApiServer) InstallPlacementBindingController(ctx context.Context, config *rest.Config) error {
+	controllerName := "global-hub-placementbinding-controller"
+	config = rest.AddUserAgent(rest.CopyConfig(config), "global-hub-placementbinding")
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		klog.Fatal(err)

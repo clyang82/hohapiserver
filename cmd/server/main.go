@@ -7,7 +7,7 @@ import (
 	"k8s.io/component-base/cli/flag"
 	"k8s.io/klog"
 
-	"github.com/clyang82/hohapiserver/server"
+	"github.com/clyang82/multicluster-global-hub-lite/server"
 	"github.com/spf13/pflag"
 )
 
@@ -27,9 +27,9 @@ func main() {
 	if err != nil {
 		klog.Fatal(err)
 	}
-	s := server.NewHoHApiServer(opts, dynamicClient, clusterCfg)
+	s := server.NewGlobalHubApiServer(opts, dynamicClient, clusterCfg)
 
-	if err := s.RunHoHApiServer(genericapiserver.SetupSignalContext()); err != nil {
+	if err := s.RunGlobalHubApiServer(genericapiserver.SetupSignalContext()); err != nil {
 		klog.Fatal(err)
 	}
 }

@@ -1,7 +1,7 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: hoh-server
+  name: multicluster-global-hub-apiserver
   namespace: open-cluster-management
 spec:
   port:
@@ -11,6 +11,6 @@ spec:
     termination: reencrypt
   to:
     kind: Service
-    name: hub-of-hubs-apiserver
+    name: multicluster-global-hub-apiserver
     weight: 100
   wildcardPolicy: None

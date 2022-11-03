@@ -3,14 +3,15 @@ package server
 import (
 	"context"
 
-	"github.com/k3s-io/kine/pkg/endpoint"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+
+	"github.com/clyang82/multicluster-global-hub-lite/server/etcd"
 )
 
-type HoHApiServer struct {
+type GlobalHubApiServer struct {
 	postStartHooks   []postStartHookEntry
 	preShutdownHooks []preShutdownHookEntry
 
@@ -41,9 +42,9 @@ type preShutdownHookEntry struct {
 	hook genericapiserver.PreShutdownHookFunc
 }
 
-func NewHoHApiServer(opts *Options, client dynamic.Interface,
-	hostedConfig *rest.Config) *HoHApiServer {
-	return &HoHApiServer{
+func NewGlobalHubApiServer(opts *Options, client dynamic.Interface,
+	hostedConfig *rest.Config) *GlobalHubApiServer {
+	return &GlobalHubApiServer{
 		options:      opts,
 		client:       client,
 		hostedConfig: hostedConfig,
@@ -51,23 +52,15 @@ func NewHoHApiServer(opts *Options, client dynamic.Interface,
 	}
 }
 
-// RunHoHApiServer starts a new HoHApiServer.
-func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
+// RunGlobalHubApiServer starts a new GlobalHubApiServer.
+func (s *GlobalHubApiServer) RunGlobalHubApiServer(ctx context.Context) error {
 
-	// embeddedClientInfo, err := etcd.Run(context.TODO(), "2380", "2379")
-	// if err != nil {
-	// 	return err
-	// }
-
-	etcdConfig, err := endpoint.Listen(ctx, endpoint.Config{
-		Listener: "http://localhost:2379",
-		Endpoint: "postgres://hoh-process-user:pGFCVv%40uP%5BQgE7fr%28%5EQ%7B6%3C5%29@hoh-pgbouncer.hoh-postgres.svc:5432/experimental",
-	})
+	embeddedClientInfo, err := etcd.Run(context.TODO(), "2380", "2379")
 	if err != nil {
 		return err
 	}
 
-	genericConfig, genericEtcdOptions, extensionServer, err := CreateExtensions(s.options, etcdConfig)
+	genericConfig, genericEtcdOptions, extensionServer, err := CreateExtensions(s.options, embeddedClientInfo)
 	if err != nil {
 		return err
 	}
@@ -125,7 +118,7 @@ func (s *HoHApiServer) RunHoHApiServer(ctx context.Context) error {
 }
 
 // AddPostStartHook allows you to add a PostStartHook that gets passed to the underlying genericapiserver implementation.
-func (s *HoHApiServer) AddPostStartHook(name string, hook genericapiserver.PostStartHookFunc) {
+func (s *GlobalHubApiServer) AddPostStartHook(name string, hook genericapiserver.PostStartHookFunc) {
 	// you could potentially add duplicate or invalid post start hooks here, but we'll let
 	// the genericapiserver implementation do its own validation during startup.
 	s.postStartHooks = append(s.postStartHooks, postStartHookEntry{
@@ -135,7 +128,7 @@ func (s *HoHApiServer) AddPostStartHook(name string, hook genericapiserver.PostS
 }
 
 // AddPreShutdownHook allows you to add a PreShutdownHookFunc that gets passed to the underlying genericapiserver implementation.
-func (s *HoHApiServer) AddPreShutdownHook(name string, hook genericapiserver.PreShutdownHookFunc) {
+func (s *GlobalHubApiServer) AddPreShutdownHook(name string, hook genericapiserver.PreShutdownHookFunc) {
 	// you could potentially add duplicate or invalid post start hooks here, but we'll let
 	// the genericapiserver implementation do its own validation during startup.
 	s.preShutdownHooks = append(s.preShutdownHooks, preShutdownHookEntry{
@@ -144,7 +137,7 @@ func (s *HoHApiServer) AddPreShutdownHook(name string, hook genericapiserver.Pre
 	})
 }
 
-// func (s *HoHApiServer) waitForSync(stop <-chan struct{}) error {
+// func (s *GlobalHubApiServer) waitForSync(stop <-chan struct{}) error {
 // 	// Wait for shared informer factories to by synced.
 // 	// factory. Otherwise, informer list calls may go into backoff (before the CRDs are ready) and
 // 	// take ~10 seconds to succeed.

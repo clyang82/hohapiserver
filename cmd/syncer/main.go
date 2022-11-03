@@ -5,7 +5,7 @@ import (
 
 	"k8s.io/component-base/cli"
 
-	"github.com/clyang82/hohapiserver/cmd/syncer/cmd"
+	"github.com/clyang82/multicluster-global-hub-lite/cmd/syncer/cmd"
 )
 
 func main() {
