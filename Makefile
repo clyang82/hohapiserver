@@ -11,6 +11,10 @@ docker:
 	docker build ./ --tag ${REGISTRY}/multicluster-global-hub-apiserver:${IMAGE_TAG}
 	docker build ./ -f Dockerfile.syncer --tag ${REGISTRY}/multicluster-global-hub-syncer:${IMAGE_TAG}
 
+docker-push: docker
+	docker push ${REGISTRY}/multicluster-global-hub-apiserver:${IMAGE_TAG}
+	docker push ${REGISTRY}/multicluster-global-hub-syncer:${IMAGE_TAG}
+
 build:
 	CGO_ENABLED=0 go build -o bin/global-hub-apiserver ./cmd/server/main.go
 	CGO_ENABLED=0 go build -o bin/syncer ./cmd/syncer/main.go

@@ -220,7 +220,6 @@ func manipulateObj(unstructuredObj *unstructured.Unstructured) {
 	unstructuredObj.SetFinalizers(nil)
 	unstructuredObj.SetGeneration(0)
 	unstructuredObj.SetOwnerReferences(nil)
-	unstructuredObj.SetClusterName("")
 
 	delete(unstructuredObj.GetAnnotations(), "kubectl.kubernetes.io/last-applied-configuration")
 
