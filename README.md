@@ -10,23 +10,23 @@ Minimal embeddable Kubernetes-style apiserver
 
 ## Prerequisites
 
-- kubectl binary
+- oc binary
 
 ## Development Prerequisites
 
 - Go v1.18+
 
-## Build the global-hub-apiserver and syncer
+## Build and psuh the global-hub-apiserver and syncer image
 
 ```sh
-make build
+make docker-push
 ```
 
 ## Start the global-hub-apiserver on an OpenShift cluster
 
 Deploy the global-hub-apiserver
 ```sh
-make deploy/server
+oc apply -k deploy/server
 ```
 
 ## Start the syncer
@@ -47,5 +47,5 @@ oc create secret generic multicluster-global-hub-kubeconfig --from-file=kubeconf
 ```
 3. Deploy the syncer
 ```sh
-make deploy/syncer
+oc apply -k deploy/syncer
 ```
