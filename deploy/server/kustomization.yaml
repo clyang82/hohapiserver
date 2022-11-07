@@ -1,3 +1,4 @@
+namespace: default
 resources:
 - ./service_account.yaml
 - ./clusterrole_binding.yaml

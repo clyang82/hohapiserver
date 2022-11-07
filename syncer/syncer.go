@@ -105,7 +105,6 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 		c.gvrs = []string{
 			"policies.v1.policy.open-cluster-management.io",
 			"managedclusters.v1.cluster.open-cluster-management.io",
-			"placementrules.v1.apps.open-cluster-management.io",
 		}
 	}
 

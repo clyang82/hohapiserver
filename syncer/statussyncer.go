@@ -91,7 +91,6 @@ func (c *Controller) applyToUpstream(ctx context.Context, gvr schema.GroupVersio
 	upstreamObj.SetUID("")
 	upstreamObj.SetResourceVersion("")
 	upstreamObj.SetManagedFields(nil)
-	upstreamObj.SetClusterName("")
 	// Deletion fields are immutable and set by the downstream API server
 	upstreamObj.SetDeletionTimestamp(nil)
 	upstreamObj.SetDeletionGracePeriodSeconds(nil)
