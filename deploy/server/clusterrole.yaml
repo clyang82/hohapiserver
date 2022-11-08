@@ -23,5 +23,4 @@ rules:
   verbs: ["create", "get", "list", "watch", "patch", "delete"]
 - apiGroups: ["cluster.open-cluster-management.io"]
   resources: ["managedclusters/status"]
-  resourceNames: ["{{ .ManagedClusterName }}"]
   verbs: ["patch", "update"]

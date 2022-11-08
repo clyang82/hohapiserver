@@ -40,18 +40,18 @@ func (s *GlobalHubApiServer) CreateCache(ctx context.Context) error {
 	}
 
 	gvkLabelsMap := map[schema.GroupVersionKind][]filteredcache.Selector{
-		apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"): {
-			{FieldSelector: fmt.Sprintf("metadata.name==%s", "policies.policy.open-cluster-management.io")},
-			{FieldSelector: fmt.Sprintf("metadata.name==%s", "placementbindings.policy.open-cluster-management.io")},
-			{FieldSelector: fmt.Sprintf("metadata.name==%s", "placementrules.apps.open-cluster-management.io")},
-			{FieldSelector: fmt.Sprintf("metadata.name==%s", "managedclusters.cluster.open-cluster-management.io")},
-			// {FieldSelector: fmt.Sprintf("metadata.name==%s", "subscriptionreports.apps.open-cluster-management.io")},
-			// {FieldSelector: fmt.Sprintf("metadata.name==%s", "subscriptions.apps.open-cluster-management.io")},
-			// {FieldSelector: fmt.Sprintf("metadata.name==%s", "subscriptionstatuses.apps.open-cluster-management.io")},
-			// {FieldSelector: fmt.Sprintf("metadata.name==%s", "clusterdeployments.hive.openshift.io")},
-			// {FieldSelector: fmt.Sprintf("metadata.name==%s", "machinepools.hive.openshift.io")},
-			// {FieldSelector: fmt.Sprintf("metadata.name==%s", "klusterletaddonconfigs.agent.open-cluster-management.io")},
-		},
+		// apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"): {
+		// 	{FieldSelector: fmt.Sprintf("metadata.name==%s", "policies.policy.open-cluster-management.io")},
+		// 	{FieldSelector: fmt.Sprintf("metadata.name==%s", "placementbindings.policy.open-cluster-management.io")},
+		// 	{FieldSelector: fmt.Sprintf("metadata.name==%s", "placementrules.apps.open-cluster-management.io")},
+		// 	{FieldSelector: fmt.Sprintf("metadata.name==%s", "managedclusters.cluster.open-cluster-management.io")},
+		// 	// {FieldSelector: fmt.Sprintf("metadata.name==%s", "subscriptionreports.apps.open-cluster-management.io")},
+		// 	// {FieldSelector: fmt.Sprintf("metadata.name==%s", "subscriptions.apps.open-cluster-management.io")},
+		// 	// {FieldSelector: fmt.Sprintf("metadata.name==%s", "subscriptionstatuses.apps.open-cluster-management.io")},
+		// 	// {FieldSelector: fmt.Sprintf("metadata.name==%s", "clusterdeployments.hive.openshift.io")},
+		// 	// {FieldSelector: fmt.Sprintf("metadata.name==%s", "machinepools.hive.openshift.io")},
+		// 	// {FieldSelector: fmt.Sprintf("metadata.name==%s", "klusterletaddonconfigs.agent.open-cluster-management.io")},
+		// },
 		policyv1.SchemeGroupVersion.WithKind("Policy"): {
 			{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
 		},
@@ -103,14 +103,8 @@ func (s *GlobalHubApiServer) InstallCRDController(ctx context.Context, config *r
 	return nil
 }
 
-func (s *GlobalHubApiServer) InstallPolicyController(ctx context.Context, config *rest.Config) error {
+func (s *GlobalHubApiServer) InstallPolicyController(ctx context.Context, dynamicClient dynamic.Interface) error {
 	controllerName := "global-hub-policy-controller"
-	config = rest.AddUserAgent(rest.CopyConfig(config), controllerName)
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		klog.Fatal(err)
-	}
-
 	informer, err := s.Cache.GetInformerForKind(ctx, policyv1.SchemeGroupVersion.WithKind("Policy"))
 	if err != nil {
 		return err
@@ -126,13 +120,8 @@ func (s *GlobalHubApiServer) InstallPolicyController(ctx context.Context, config
 	return nil
 }
 
-func (s *GlobalHubApiServer) InstallPlacementRuleController(ctx context.Context, config *rest.Config) error {
+func (s *GlobalHubApiServer) InstallPlacementRuleController(ctx context.Context, dynamicClient dynamic.Interface) error {
 	controllerName := "global-hub-placementrule-controller"
-	config = rest.AddUserAgent(rest.CopyConfig(config), controllerName)
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		klog.Fatal(err)
-	}
 
 	informer, err := s.Cache.GetInformerForKind(ctx, placementrulev1.SchemeGroupVersion.WithKind("PlacementRule"))
 	if err != nil {
@@ -149,13 +138,8 @@ func (s *GlobalHubApiServer) InstallPlacementRuleController(ctx context.Context,
 	return nil
 }
 
-func (s *GlobalHubApiServer) InstallPlacementBindingController(ctx context.Context, config *rest.Config) error {
+func (s *GlobalHubApiServer) InstallPlacementBindingController(ctx context.Context, dynamicClient dynamic.Interface) error {
 	controllerName := "global-hub-placementbinding-controller"
-	config = rest.AddUserAgent(rest.CopyConfig(config), "global-hub-placementbinding")
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		klog.Fatal(err)
-	}
 
 	informer, err := s.Cache.GetInformerForKind(ctx, policyv1.SchemeGroupVersion.WithKind("PlacementBinding"))
 	if err != nil {

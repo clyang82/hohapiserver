@@ -2,7 +2,13 @@ package server
 
 import (
 	"context"
+	"embed"
+	"io/fs"
 
+	"gopkg.in/yaml.v2"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -10,6 +16,9 @@ import (
 
 	"github.com/clyang82/multicluster-global-hub-lite/server/etcd"
 )
+
+//go:embed manifests
+var crdManifestsFS embed.FS
 
 type GlobalHubApiServer struct {
 	postStartHooks   []postStartHookEntry
@@ -82,26 +91,35 @@ func (s *GlobalHubApiServer) RunGlobalHubApiServer(ctx context.Context) error {
 	}
 
 	controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
-
-	err = s.InstallCRDController(ctx, controllerConfig)
+	dynamicClient, err := dynamic.NewForConfig(controllerConfig)
 	if err != nil {
 		return err
 	}
 
-	// err = s.InstallPolicyController(ctx, controllerConfig)
+	err = installCRDs(dynamicClient)
+	if err != nil {
+		return err
+	}
+
+	// err = s.InstallCRDController(ctx, dynamicClient)
 	// if err != nil {
 	// 	return err
 	// }
 
-	// err = s.InstallPlacementRuleController(ctx, controllerConfig)
-	// if err != nil {
-	// 	return err
-	// }
+	err = s.InstallPolicyController(ctx, dynamicClient)
+	if err != nil {
+		return err
+	}
 
-	// err = s.InstallPlacementBindingController(ctx, controllerConfig)
-	// if err != nil {
-	// 	return err
-	// }
+	err = s.InstallPlacementRuleController(ctx, dynamicClient)
+	if err != nil {
+		return err
+	}
+
+	err = s.InstallPlacementBindingController(ctx, dynamicClient)
+	if err != nil {
+		return err
+	}
 
 	// TODO: kubectl explain currently failing on crd resources, but works on apiservices
 	// kubectl get and describe do work, though
@@ -148,3 +166,31 @@ func (s *GlobalHubApiServer) AddPreShutdownHook(name string, hook genericapiserv
 // 		return nil
 // 	}
 // }
+
+func installCRDs(dynamicClient dynamic.Interface) error {
+	return fs.WalkDir(crdManifestsFS, "manifests", func(file string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !d.IsDir() {
+			b, err := crdManifestsFS.ReadFile(file)
+			if err != nil {
+				return err
+			}
+			obj := &unstructured.Unstructured{}
+			err = yaml.Unmarshal([]byte(b), &obj)
+			if err != nil {
+				return err
+			}
+			_, err = dynamicClient.
+				Resource(apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions")).
+				Create(context.TODO(), obj, metav1.CreateOptions{})
+			if err != nil {
+				return err
+			}
+
+		}
+		return nil
+	})
+}

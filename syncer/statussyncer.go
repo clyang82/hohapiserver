@@ -69,6 +69,7 @@ func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.Grou
 	if err != nil {
 		if gvr.Resource == "managedclusters" && errors.IsNotFound(err) {
 			c.applyToUpstream(ctx, gvr, upstreamNamespace, downstreamObj)
+			return nil
 		}
 		klog.Errorf("Getting resource %s/%s: %v", upstreamNamespace, upstreamObj.GetName(), err)
 		return err
