@@ -5,7 +5,6 @@ import (
 	"embed"
 	"io/fs"
 
-	"gopkg.in/yaml.v2"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -13,6 +12,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/yaml"
 
 	"github.com/clyang82/multicluster-global-hub-lite/server/etcd"
 )
@@ -85,13 +85,13 @@ func (s *GlobalHubApiServer) RunGlobalHubApiServer(ctx context.Context) error {
 		return err
 	}
 
-	err = s.CreateCache(ctx)
+	controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
+	dynamicClient, err := dynamic.NewForConfig(controllerConfig)
 	if err != nil {
 		return err
 	}
 
-	controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
-	dynamicClient, err := dynamic.NewForConfig(controllerConfig)
+	err = s.CreateCache(ctx)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func installCRDs(dynamicClient dynamic.Interface) error {
 				return err
 			}
 			obj := &unstructured.Unstructured{}
-			err = yaml.Unmarshal([]byte(b), &obj)
+			err = yaml.Unmarshal(b, &obj)
 			if err != nil {
 				return err
 			}
@@ -189,7 +189,6 @@ func installCRDs(dynamicClient dynamic.Interface) error {
 			if err != nil {
 				return err
 			}
-
 		}
 		return nil
 	})
