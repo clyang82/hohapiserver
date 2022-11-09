@@ -76,29 +76,31 @@ func (s *GlobalHubApiServer) RunGlobalHubApiServer(ctx context.Context) error {
 		return err
 	}
 
-	err = s.CreateCache(ctx)
-	if err != nil {
-		return err
-	}
+	extensionServer.Informers.Apiextensions()
+	extensionServer.Informers.Start(ctx.Done())
 
 	controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
-
-	err = s.InstallCRDController(ctx, controllerConfig)
+	dynamicClient, err := dynamic.NewForConfig(controllerConfig)
 	if err != nil {
 		return err
 	}
 
-	// err = s.InstallPolicyController(ctx, controllerConfig)
+	err = s.InstallCRDController(ctx, dynamicClient)
+	if err != nil {
+		return err
+	}
+
+	// err = s.InstallPolicyController(ctx, dynamicClient)
 	// if err != nil {
 	// 	return err
 	// }
 
-	// err = s.InstallPlacementRuleController(ctx, controllerConfig)
+	// err = s.InstallPlacementRuleController(ctx, dynamicClient)
 	// if err != nil {
 	// 	return err
 	// }
 
-	// err = s.InstallPlacementBindingController(ctx, controllerConfig)
+	// err = s.InstallPlacementBindingController(ctx, dynamicClient)
 	// if err != nil {
 	// 	return err
 	// }

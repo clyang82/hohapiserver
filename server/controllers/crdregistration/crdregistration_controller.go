@@ -79,24 +79,24 @@ func NewCRDRegistrationController(crdinformer crdinformers.CustomResourceDefinit
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			// Enqueue both old and new object to make sure we remove and add appropriate API services.
 			// The working queue will resolve any duplicates and only changes will stay in the queue.
-			c.enqueueCRD(oldObj.(*apiextensionsv1.CustomResourceDefinition))
-			c.enqueueCRD(newObj.(*apiextensionsv1.CustomResourceDefinition))
+			// c.enqueueCRD(oldObj.(*apiextensionsv1.CustomResourceDefinition))
+			// c.enqueueCRD(newObj.(*apiextensionsv1.CustomResourceDefinition))
 		},
 		DeleteFunc: func(obj interface{}) {
-			cast, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
-			if !ok {
-				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
-				if !ok {
-					klog.V(2).Infof("Couldn't get object from tombstone %#v", obj)
-					return
-				}
-				cast, ok = tombstone.Obj.(*apiextensionsv1.CustomResourceDefinition)
-				if !ok {
-					klog.V(2).Infof("Tombstone contained unexpected object: %#v", obj)
-					return
-				}
-			}
-			c.enqueueCRD(cast)
+			// cast, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
+			// if !ok {
+			// 	tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+			// 	if !ok {
+			// 		klog.V(2).Infof("Couldn't get object from tombstone %#v", obj)
+			// 		return
+			// 	}
+			// 	cast, ok = tombstone.Obj.(*apiextensionsv1.CustomResourceDefinition)
+			// 	if !ok {
+			// 		klog.V(2).Infof("Tombstone contained unexpected object: %#v", obj)
+			// 		return
+			// 	}
+			// }
+			// c.enqueueCRD(cast)
 		},
 	})
 

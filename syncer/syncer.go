@@ -79,9 +79,9 @@ type Controller struct {
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
 func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Controller, error) {
-	controllerName := string(direction) + "--regionl-hub-->global-hub"
+	controllerName := string(direction) + "--regional-hub-->global-hub"
 	if direction == SyncDown {
-		controllerName = string(direction) + "--global-hub-->regionl-hub"
+		controllerName = string(direction) + "--global-hub-->regional-hub"
 	}
 	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "globalhub-"+controllerName)
 
@@ -113,6 +113,9 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 			o.LabelSelector = fmt.Sprintf("!%s", "policy.open-cluster-management.io/root-policy")
 		})
 
+	// toInformers := dynamicinformer.NewFilteredDynamicSharedInformerFactory(toClient, resyncPeriod,
+	// 	metav1.NamespaceAll, func(o *metav1.ListOptions) {})
+
 	for _, gvrstr := range c.gvrs {
 		gvr, _ := schema.ParseResourceArg(gvrstr)
 
@@ -131,6 +134,7 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 			},
 			DeleteFunc: func(obj interface{}) { c.AddToQueue(*gvr, obj) },
 		})
+
 		klog.InfoS("Set up informer", "direction", c.direction, "gvr", gvr)
 	}
 
