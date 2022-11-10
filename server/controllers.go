@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"time"
 
 	filteredcache "github.com/IBM/controller-filtered-cache/filteredcache"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/rest"
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	placementrulev1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
@@ -21,30 +23,34 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
+	policysummaryv1alpha1 "github.com/clyang82/multicluster-global-hub-lite/apis/policysummary/v1alpha1"
 	"github.com/clyang82/multicluster-global-hub-lite/server/controllers"
 )
 
 const (
-// rootPolicyLabel    = "policy.open-cluster-management.io/root-policy"
-// localResourceLabel = "multicluster-global-hub.open-cluster-management.io/local-resource"
+	// rootPolicyLabel    = "policy.open-cluster-management.io/root-policy"
+	localResourceLabel = "multicluster-global-hub.open-cluster-management.io/local-resource"
+	resyncPeriod       = 10 * time.Hour
 )
 
 //go:embed manifests
 var crdManifestsFS embed.FS
 
 func (s *GlobalHubApiServer) CreateCache(ctx context.Context, cfg *rest.Config) error {
-
 	scheme := runtime.NewScheme()
 
 	if err := apiextensionsv1.AddToScheme(scheme); err != nil {
 		return err
 	}
-	// if err := policyv1.AddToScheme(scheme); err != nil {
-	// 	return err
-	// }
-	// if err := placementrulev1.AddToScheme(scheme); err != nil {
-	// 	return err
-	// }
+	if err := policyv1.AddToScheme(scheme); err != nil {
+		return err
+	}
+	if err := placementrulev1.AddToScheme(scheme); err != nil {
+		return err
+	}
+	if err := policysummaryv1alpha1.AddToScheme(scheme); err != nil {
+		return err
+	}
 
 	gvkLabelsMap := map[schema.GroupVersionKind][]filteredcache.Selector{
 		apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"): {
@@ -59,15 +65,15 @@ func (s *GlobalHubApiServer) CreateCache(ctx context.Context, cfg *rest.Config) 
 			// {FieldSelector: fmt.Sprintf("metadata.name==%s", "machinepools.hive.openshift.io")},
 			// {FieldSelector: fmt.Sprintf("metadata.name==%s", "klusterletaddonconfigs.agent.open-cluster-management.io")},
 		},
-		// policyv1.SchemeGroupVersion.WithKind("Policy"): {
-		// 	{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
-		// },
-		// policyv1.SchemeGroupVersion.WithKind("PlacementBinding"): {
-		// 	{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
-		// },
-		// placementrulev1.SchemeGroupVersion.WithKind("PlacementRule"): {
-		// 	{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
-		// },
+		policyv1.SchemeGroupVersion.WithKind("Policy"): {
+			{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
+		},
+		policyv1.SchemeGroupVersion.WithKind("PlacementBinding"): {
+			{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
+		},
+		placementrulev1.SchemeGroupVersion.WithKind("PlacementRule"): {
+			{LabelSelector: fmt.Sprint("!" + localResourceLabel)},
+		},
 	}
 
 	opts := cache.Options{
@@ -86,7 +92,6 @@ func (s *GlobalHubApiServer) CreateCache(ctx context.Context, cfg *rest.Config) 
 }
 
 func (s *GlobalHubApiServer) InstallCRDController(ctx context.Context, dynamicClient dynamic.Interface) error {
-
 	controllerName := "global-hub-crd-controller"
 
 	// informer, err := s.Cache.GetInformerForKind(ctx, apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
@@ -108,16 +113,24 @@ func (s *GlobalHubApiServer) InstallCRDController(ctx context.Context, dynamicCl
 
 func (s *GlobalHubApiServer) InstallPolicyController(ctx context.Context, dynamicClient dynamic.Interface) error {
 	controllerName := "global-hub-policy-controller"
-	informer, err := s.Cache.GetInformerForKind(ctx, policyv1.SchemeGroupVersion.WithKind("Policy"))
-	if err != nil {
-		return err
-	}
-	c := controllers.NewGenericController(ctx, controllerName, dynamicClient,
-		policyv1.SchemeGroupVersion.WithResource("policies"), informer, s.Cache,
+
+	// dynamic informer
+	gvr, _ := schema.ParseResourceArg("policies.v1.policy.open-cluster-management.io")
+	dynamicSharedInformerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(dynamicClient, resyncPeriod,
+		metav1.NamespaceAll, func(o *metav1.ListOptions) {
+			o.LabelSelector = fmt.Sprintf("!%s", "policy.open-cluster-management.io/root-policy")
+		})
+	informer := dynamicSharedInformerFactory.ForResource(*gvr).Informer()
+	// informer, err := s.Cache.GetInformerForKind(ctx, policyv1.GroupVersion.WithKind("Policy"))
+	// if err != nil {
+	// 	return err
+	// }
+	// gvr := policyv1.SchemeGroupVersion.WithResource("policies")
+	c := controllers.NewPolicyController(ctx, controllerName, dynamicClient, *gvr, informer, s.Cache,
 		func() client.Object { return &policyv1.Policy{} })
 
 	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName), func(hookContext genericapiserver.PostStartHookContext) error {
-		go c.Run(ctx, 1)
+		go c.Run(ctx, 2)
 		return nil
 	})
 	return nil

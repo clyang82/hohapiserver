@@ -26,3 +26,5 @@ etcd-socket*
 # binary builds
 bin/
 vendor
+
+.vscode

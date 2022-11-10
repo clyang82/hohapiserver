@@ -21,7 +21,7 @@ spec:
         - "--from-kubeconfig=/multicluster-global-hub-config/kubeconfig"
         env:
         name: multicluster-global-hub-syncer
-        image: quay.io/clyang82/multicluster-global-hub-syncer:latest
+        image: quay.io/myan/multicluster-global-hub-syncer:latest
         imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false

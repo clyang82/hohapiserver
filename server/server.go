@@ -15,7 +15,7 @@ type GlobalHubApiServer struct {
 	postStartHooks   []postStartHookEntry
 	preShutdownHooks []preShutdownHookEntry
 
-	//contains server starting options
+	// contains server starting options
 	options *Options
 
 	hostedConfig *rest.Config
@@ -43,7 +43,8 @@ type preShutdownHookEntry struct {
 }
 
 func NewGlobalHubApiServer(opts *Options, client dynamic.Interface,
-	hostedConfig *rest.Config) *GlobalHubApiServer {
+	hostedConfig *rest.Config,
+) *GlobalHubApiServer {
 	return &GlobalHubApiServer{
 		options:      opts,
 		client:       client,
@@ -54,7 +55,6 @@ func NewGlobalHubApiServer(opts *Options, client dynamic.Interface,
 
 // RunGlobalHubApiServer starts a new GlobalHubApiServer.
 func (s *GlobalHubApiServer) RunGlobalHubApiServer(ctx context.Context) error {
-
 	embeddedClientInfo, err := etcd.Run(context.TODO(), "2380", "2379")
 	if err != nil {
 		return err
@@ -80,20 +80,22 @@ func (s *GlobalHubApiServer) RunGlobalHubApiServer(ctx context.Context) error {
 	extensionServer.Informers.Start(ctx.Done())
 
 	controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
+	if err := s.CreateCache(ctx, controllerConfig); err != nil {
+		return err
+	}
+
 	dynamicClient, err := dynamic.NewForConfig(controllerConfig)
 	if err != nil {
 		return err
 	}
 
-	err = s.InstallCRDController(ctx, dynamicClient)
-	if err != nil {
+	if err = s.InstallCRDController(ctx, dynamicClient); err != nil {
 		return err
 	}
 
-	// err = s.InstallPolicyController(ctx, dynamicClient)
-	// if err != nil {
-	// 	return err
-	// }
+	if err := s.InstallPolicyController(ctx, dynamicClient); err != nil {
+		return err
+	}
 
 	// err = s.InstallPlacementRuleController(ctx, dynamicClient)
 	// if err != nil {
