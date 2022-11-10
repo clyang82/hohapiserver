@@ -105,6 +105,9 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 		c.gvrs = []string{
 			"policies.v1.policy.open-cluster-management.io",
 			"managedclusters.v1.cluster.open-cluster-management.io",
+			"clustermanagementaddons.v1alpha1.addon.open-cluster-management.io",
+			"routes.v1.route.openshift.io",
+			"deployments.v1.apps",
 		}
 	}
 
@@ -120,19 +123,72 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 		gvr, _ := schema.ParseResourceArg(gvrstr)
 
 		fromInformers.ForResource(*gvr).Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) { c.AddToQueue(*gvr, obj) },
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				if c.direction == SyncDown {
-					if !deepEqualApartFromStatus(oldObj, newObj) {
-						c.AddToQueue(*gvr, newObj)
+			AddFunc: func(obj interface{}) {
+				shouldEnqueue := true
+				// for route and deployment, need to check the label(component=ocm-controlplane) before enqueue
+				if gvr.Resource == "routes" || gvr.Resource == "deployments" {
+					unstrob, ok := obj.(*unstructured.Unstructured)
+					if !ok {
+						shouldEnqueue = false
 					}
-				} else {
-					if !deepEqualStatus(oldObj, newObj) {
-						c.AddToQueue(*gvr, newObj)
+					if componentLabelVal, exist := unstrob.GetLabels()["component"]; !exist || componentLabelVal != "ocm-controlplane" {
+						shouldEnqueue = false
+					}
+				}
+				if gvr.Resource == "clustermanagementaddons" {
+					shouldEnqueue = false
+				}
+				if shouldEnqueue {
+					c.AddToQueue(*gvr, obj)
+				}
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				shouldEnqueue := true
+				// for route and deployment, need to check the label(component=ocm-controlplane) before enqueue
+				if gvr.Resource == "routes" || gvr.Resource == "deployments" {
+					_, isOldObjUnstructured := oldObj.(*unstructured.Unstructured)
+					newUnstrob, isNewObjUnstructured := newObj.(*unstructured.Unstructured)
+					if !isOldObjUnstructured || !isNewObjUnstructured {
+						shouldEnqueue = false
+					}
+					if componentLabelVal, exist := newUnstrob.GetLabels()["component"]; !exist || componentLabelVal != "ocm-controlplane" {
+						shouldEnqueue = false
+					}
+				}
+				if gvr.Resource == "clustermanagementaddons" {
+					shouldEnqueue = false
+				}
+				if shouldEnqueue {
+					if c.direction == SyncDown {
+						if !deepEqualApartFromStatus(oldObj, newObj) {
+							c.AddToQueue(*gvr, newObj)
+						}
+					} else {
+						if !deepEqualStatus(oldObj, newObj) {
+							c.AddToQueue(*gvr, newObj)
+						}
 					}
 				}
 			},
-			DeleteFunc: func(obj interface{}) { c.AddToQueue(*gvr, obj) },
+			DeleteFunc: func(obj interface{}) {
+				shouldEnqueue := true
+				// for route and deployment, need to check the label(component=ocm-controlplane) before enqueue
+				if gvr.Resource == "routes" || gvr.Resource == "deployments" {
+					unstrob, ok := obj.(*unstructured.Unstructured)
+					if !ok {
+						shouldEnqueue = false
+					}
+					if componentLabelVal, exist := unstrob.GetLabels()["component"]; !exist || componentLabelVal != "ocm-controlplane" {
+						shouldEnqueue = false
+					}
+				}
+				if gvr.Resource == "clustermanagementaddons" {
+					shouldEnqueue = false
+				}
+				if shouldEnqueue {
+					c.AddToQueue(*gvr, obj)
+				}
+			},
 		})
 
 		klog.InfoS("Set up informer", "direction", c.direction, "gvr", gvr)
