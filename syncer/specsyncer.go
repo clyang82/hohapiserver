@@ -11,8 +11,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
 )
@@ -53,19 +56,21 @@ func NewSpecSyncer(from, to *rest.Config) (*Controller, error) {
 
 	fromClient := dynamic.NewForConfigOrDie(from)
 	toClient := dynamic.NewForConfigOrDie(to)
+	toDiscoverClient := discovery.NewDiscoveryClientForConfigOrDie(to)
+	toRestMapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(toDiscoverClient))
 
-	return New(fromClient, toClient, from, SyncDown)
+	return New(fromClient, toClient, from, toRestMapper, SyncDown)
 }
 
-func (c *Controller) deleteFromDownstream(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error {
+func (c *Controller) deleteFromDownstream(ctx context.Context, dr dynamic.ResourceInterface, gvr schema.GroupVersionResource, namespace, name string) error {
 
-	return c.toClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	return dr.Delete(ctx, name, metav1.DeleteOptions{})
 }
 
 // TODO: This function is there as a quick and dirty implementation of namespace creation.
 //       In fact We should also be getting notifications about namespaces created upstream and be creating downstream equivalents.
-func (c *Controller) ensureDownstreamNamespaceExists(ctx context.Context, downstreamNamespace string, upstreamObj *unstructured.Unstructured) error {
-	namespaces := c.toClient.Resource(schema.GroupVersionResource{
+func (c *Controller) ensureDownstreamNamespaceExists(ctx context.Context, dr dynamic.ResourceInterface, downstreamNamespace string, upstreamObj *unstructured.Unstructured) error {
+	namespaceResourceClient := c.toClient.Resource(schema.GroupVersionResource{
 		Group:    "",
 		Version:  "v1",
 		Resource: "namespaces",
@@ -76,7 +81,7 @@ func (c *Controller) ensureDownstreamNamespaceExists(ctx context.Context, downst
 	newNamespace.SetKind("Namespace")
 	newNamespace.SetName(downstreamNamespace)
 
-	if _, err := namespaces.Create(ctx, newNamespace, metav1.CreateOptions{}); err != nil {
+	if _, err := namespaceResourceClient.Create(ctx, newNamespace, metav1.CreateOptions{}); err != nil {
 		// An already exists error is ok - it means something else beat us to creating the namespace.
 		if !k8serrors.IsAlreadyExists(err) {
 			// Any other error is not good, though.
@@ -91,8 +96,8 @@ func (c *Controller) ensureDownstreamNamespaceExists(ctx context.Context, downst
 	return nil
 }
 
-func (c *Controller) applyToDownstream(ctx context.Context, gvr schema.GroupVersionResource, downstreamNamespace string, upstreamObj *unstructured.Unstructured) error {
-	if err := c.ensureDownstreamNamespaceExists(ctx, downstreamNamespace, upstreamObj); err != nil {
+func (c *Controller) applyToDownstream(ctx context.Context, dr dynamic.ResourceInterface, gvr schema.GroupVersionResource, downstreamNamespace string, upstreamObj *unstructured.Unstructured) error {
+	if err := c.ensureDownstreamNamespaceExists(ctx, dr, downstreamNamespace, upstreamObj); err != nil {
 		return err
 	}
 
@@ -116,7 +121,7 @@ func (c *Controller) applyToDownstream(ctx context.Context, gvr schema.GroupVers
 		return err
 	}
 
-	if _, err := c.toClient.Resource(gvr).Namespace(downstreamNamespace).Patch(ctx, downstreamObj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{FieldManager: syncerApplyManager, Force: pointer.Bool(true)}); err != nil {
+	if _, err := dr.Patch(ctx, downstreamObj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{FieldManager: syncerApplyManager, Force: pointer.Bool(true)}); err != nil {
 		klog.Infof("Error upserting %s %s/%s from upstream %s/%s: %v", gvr.Resource, downstreamObj.GetNamespace(), downstreamObj.GetName(), upstreamObj.GetNamespace(), upstreamObj.GetName(), err)
 		return err
 	}

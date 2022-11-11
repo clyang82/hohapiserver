@@ -29,8 +29,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
 
@@ -66,11 +69,15 @@ func NewStatusSyncer(from, to *rest.Config) (*Controller, error) {
 
 	fromClient := dynamic.NewForConfigOrDie(from)
 	toClient := dynamic.NewForConfigOrDie(to)
+	toDiscoverClient := discovery.NewDiscoveryClientForConfigOrDie(to)
+	toRestMapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(toDiscoverClient))
 
-	return New(fromClient, toClient, from, SyncUp)
+	return New(fromClient, toClient, from, toRestMapper, SyncUp)
 }
 
-func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured) error {
+func (c *Controller) updateStatusInUpstream(ctx context.Context, dr dynamic.ResourceInterface,
+	gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured,
+) error {
 	// for customresourcedefinition and clustermanagementaddon changes, need to translate to hubcontrolplane and then apply to upstream
 	if gvr.Resource == "customresourcedefinitions" || gvr.Resource == "clustermanagementaddons" {
 		return c.applyHubControlPlaneInUpstream(ctx, gvr, upstreamNamespace, downstreamObj)
@@ -89,10 +96,10 @@ func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.Grou
 	upstreamObj.SetResourceVersion("")
 	upstreamObj.SetNamespace(upstreamNamespace)
 
-	existing, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).Get(ctx, upstreamObj.GetName(), metav1.GetOptions{})
+	existing, err := dr.Get(ctx, upstreamObj.GetName(), metav1.GetOptions{})
 	if err != nil {
 		if gvr.Resource == "managedclusters" && errors.IsNotFound(err) {
-			c.applyToUpstream(ctx, gvr, upstreamNamespace, downstreamObj)
+			c.applyToUpstream(ctx, dr, gvr, upstreamNamespace, downstreamObj)
 			return nil
 		}
 		klog.Errorf("Getting resource %s/%s: %v", upstreamNamespace, upstreamObj.GetName(), err)
@@ -100,7 +107,7 @@ func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.Grou
 	}
 
 	upstreamObj.SetResourceVersion(existing.GetResourceVersion())
-	if _, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).UpdateStatus(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
+	if _, err := dr.UpdateStatus(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
 		klog.Errorf("Failed updating status of resource %s/%s from leaf hub cluster namespace %s: %v", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace(), err)
 		return err
 	}
@@ -110,7 +117,7 @@ func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.Grou
 }
 
 // applyToUpstream is used to apply managedclusters to upstream
-func (c *Controller) applyToUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured) error {
+func (c *Controller) applyToUpstream(ctx context.Context, dr dynamic.ResourceInterface, gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured) error {
 
 	upstreamObj := downstreamObj.DeepCopy()
 	upstreamObj.SetUID("")
@@ -131,7 +138,7 @@ func (c *Controller) applyToUpstream(ctx context.Context, gvr schema.GroupVersio
 		return err
 	}
 
-	if _, err := c.toClient.Resource(gvr).Patch(ctx, upstreamObj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{FieldManager: syncerApplyManager, Force: pointer.Bool(true)}); err != nil {
+	if _, err := dr.Patch(ctx, upstreamObj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{FieldManager: syncerApplyManager, Force: pointer.Bool(true)}); err != nil {
 		klog.Infof("Error upserting %s %s from downstream %s: %v", gvr.Resource, upstreamObj.GetName(), downstreamObj.GetName(), err)
 		return err
 	}
@@ -189,7 +196,7 @@ func (c *Controller) applyHubControlPlaneInUpstream(ctx context.Context, gvr sch
 
 	hubControlPlaneUnstrObj.SetUnstructuredContent(hubControlPlaneUnstrContent)
 	hubControlPlaneUnstrObj.SetGroupVersionKind(hubControlPlane.GetObjectKind().GroupVersionKind())
-	c.applyToUpstream(ctx, hubControlPlaneGVR, "", &hubControlPlaneUnstrObj)
+	c.applyToUpstream(ctx, c.toClient.Resource(hubControlPlaneGVR), hubControlPlaneGVR, "", &hubControlPlaneUnstrObj)
 
 	return nil
 }
