@@ -2,29 +2,28 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 
+	"github.com/clyang82/multicluster-global-hub-lite/server/controllers"
 	"github.com/clyang82/multicluster-global-hub-lite/server/etcd"
 )
 
 type GlobalHubApiServer struct {
 	postStartHooks   []postStartHookEntry
 	preShutdownHooks []preShutdownHookEntry
-
 	// contains server starting options
-	options *Options
-
-	hostedConfig *rest.Config
-	// contains caches
-	Cache cache.Cache
-
-	client dynamic.Interface
-
-	syncedCh chan struct{}
+	options         *Options
+	informerFactory dynamicinformer.DynamicSharedInformerFactory
+	restConfig      *rest.Config
+	client          dynamic.Interface
+	ctx             context.Context
 }
 
 // postStartHookEntry groups a PostStartHookFunc with a name. We're not storing these hooks
@@ -42,14 +41,10 @@ type preShutdownHookEntry struct {
 	hook genericapiserver.PreShutdownHookFunc
 }
 
-func NewGlobalHubApiServer(opts *Options, client dynamic.Interface,
-	hostedConfig *rest.Config,
+func NewGlobalHubApiServer(opts *Options,
 ) *GlobalHubApiServer {
 	return &GlobalHubApiServer{
-		options:      opts,
-		client:       client,
-		hostedConfig: hostedConfig,
-		syncedCh:     make(chan struct{}),
+		options: opts,
 	}
 }
 
@@ -79,33 +74,22 @@ func (s *GlobalHubApiServer) RunGlobalHubApiServer(ctx context.Context) error {
 	extensionServer.Informers.Apiextensions()
 	extensionServer.Informers.Start(ctx.Done())
 
-	controllerConfig := rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
-	if err := s.CreateCache(ctx, controllerConfig); err != nil {
-		return err
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(controllerConfig)
+	s.restConfig = rest.CopyConfig(aggregatorServer.GenericAPIServer.LoopbackClientConfig)
+	s.client, err = dynamic.NewForConfig(s.restConfig)
 	if err != nil {
 		return err
 	}
+	s.ctx = ctx
+	s.informerFactory = dynamicinformer.NewFilteredDynamicSharedInformerFactory(s.client, 10*time.Hour,
+		metav1.NamespaceAll, func(o *metav1.ListOptions) {
+			o.LabelSelector = fmt.Sprintf("!%s", "multicluster-global-hub.open-cluster-management.io/local-resource")
+		})
 
-	if err = s.InstallCRDController(ctx, dynamicClient); err != nil {
+	if err = s.installCRD(ctx); err != nil {
 		return err
 	}
 
-	if err := s.InstallPolicyController(ctx, dynamicClient); err != nil {
-		return err
-	}
-
-	// err = s.InstallPlacementRuleController(ctx, dynamicClient)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// err = s.InstallPlacementBindingController(ctx, dynamicClient)
-	// if err != nil {
-	// 	return err
-	// }
+	controllers.AddControllers(s)
 
 	// TODO: kubectl explain currently failing on crd resources, but works on apiservices
 	// kubectl get and describe do work, though
@@ -140,15 +124,3 @@ func (s *GlobalHubApiServer) AddPreShutdownHook(name string, hook genericapiserv
 		hook: hook,
 	})
 }
-
-// func (s *GlobalHubApiServer) waitForSync(stop <-chan struct{}) error {
-// 	// Wait for shared informer factories to by synced.
-// 	// factory. Otherwise, informer list calls may go into backoff (before the CRDs are ready) and
-// 	// take ~10 seconds to succeed.
-// 	select {
-// 	case <-stop:
-// 		return errors.New("timed out waiting for informers to sync")
-// 	case <-s.syncedCh:
-// 		return nil
-// 	}
-// }

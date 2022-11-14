@@ -2,8 +2,6 @@ package main
 
 import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/component-base/cli/flag"
 	"k8s.io/klog"
 
@@ -12,22 +10,12 @@ import (
 )
 
 func main() {
-
 	opts := server.NewOptions()
 	opts.AddFlags(pflag.CommandLine)
 
 	flag.InitFlags()
 
-	clusterCfg, err := clientcmd.BuildConfigFromFlags("", "")
-	if err != nil {
-		klog.Fatal(err)
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(clusterCfg)
-	if err != nil {
-		klog.Fatal(err)
-	}
-	s := server.NewGlobalHubApiServer(opts, dynamicClient, clusterCfg)
+	s := server.NewGlobalHubApiServer(opts)
 
 	if err := s.RunGlobalHubApiServer(genericapiserver.SetupSignalContext()); err != nil {
 		klog.Fatal(err)
