@@ -68,6 +68,7 @@ type Controller struct {
 	queue workqueue.RateLimitingInterface
 
 	fromInformers dynamicinformer.DynamicSharedInformerFactory
+	fromConfig    *rest.Config
 	toClient      dynamic.Interface
 
 	upsertFn  UpsertFunc
@@ -78,7 +79,7 @@ type Controller struct {
 }
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
-func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Controller, error) {
+func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direction SyncDirection) (*Controller, error) {
 	controllerName := string(direction) + "--regional-hub-->global-hub"
 	if direction == SyncDown {
 		controllerName = string(direction) + "--global-hub-->regional-hub"
@@ -86,10 +87,11 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "globalhub-"+controllerName)
 
 	c := Controller{
-		name:      controllerName,
-		queue:     queue,
-		toClient:  toClient,
-		direction: direction,
+		name:       controllerName,
+		queue:      queue,
+		toClient:   toClient,
+		fromConfig: fromConfig,
+		direction:  direction,
 	}
 
 	if direction == SyncDown {
@@ -106,8 +108,7 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 			"policies.v1.policy.open-cluster-management.io",
 			"managedclusters.v1.cluster.open-cluster-management.io",
 			"clustermanagementaddons.v1alpha1.addon.open-cluster-management.io",
-			"routes.v1.route.openshift.io",
-			"deployments.v1.apps",
+			"customresourcedefinitions.v1.apiextensions.k8s.io",
 		}
 	}
 
@@ -125,39 +126,38 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 		fromInformers.ForResource(*gvr).Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				shouldEnqueue := true
-				// for route and deployment, need to check the label(component=ocm-controlplane) before enqueue
-				if gvr.Resource == "routes" || gvr.Resource == "deployments" {
-					unstrob, ok := obj.(*unstructured.Unstructured)
-					if !ok {
-						shouldEnqueue = false
-					}
-					if componentLabelVal, exist := unstrob.GetLabels()["component"]; !exist || componentLabelVal != "ocm-controlplane" {
-						shouldEnqueue = false
+				if c.direction == SyncUp {
+					// check the managedcluster CRD to make sure this is a hub controlplane
+					if gvr.Resource == "customresourcedefinitions" {
+						unstrob, ok := obj.(*unstructured.Unstructured)
+						if !ok {
+							shouldEnqueue = false
+						}
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+							shouldEnqueue = false
+						}
 					}
 				}
-				if gvr.Resource == "clustermanagementaddons" {
-					shouldEnqueue = false
-				}
+
 				if shouldEnqueue {
 					c.AddToQueue(*gvr, obj)
 				}
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				shouldEnqueue := true
-				// for route and deployment, need to check the label(component=ocm-controlplane) before enqueue
-				if gvr.Resource == "routes" || gvr.Resource == "deployments" {
-					_, isOldObjUnstructured := oldObj.(*unstructured.Unstructured)
-					newUnstrob, isNewObjUnstructured := newObj.(*unstructured.Unstructured)
-					if !isOldObjUnstructured || !isNewObjUnstructured {
-						shouldEnqueue = false
-					}
-					if componentLabelVal, exist := newUnstrob.GetLabels()["component"]; !exist || componentLabelVal != "ocm-controlplane" {
-						shouldEnqueue = false
+				if c.direction == SyncUp {
+					// check the managedcluster CRD to make sure this is a hub controlplane
+					if gvr.Resource == "customresourcedefinitions" {
+						unstrob, ok := newObj.(*unstructured.Unstructured)
+						if !ok {
+							shouldEnqueue = false
+						}
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+							shouldEnqueue = false
+						}
 					}
 				}
-				if gvr.Resource == "clustermanagementaddons" {
-					shouldEnqueue = false
-				}
+
 				if shouldEnqueue {
 					if c.direction == SyncDown {
 						if !deepEqualApartFromStatus(oldObj, newObj) {
@@ -172,19 +172,19 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 			},
 			DeleteFunc: func(obj interface{}) {
 				shouldEnqueue := true
-				// for route and deployment, need to check the label(component=ocm-controlplane) before enqueue
-				if gvr.Resource == "routes" || gvr.Resource == "deployments" {
-					unstrob, ok := obj.(*unstructured.Unstructured)
-					if !ok {
-						shouldEnqueue = false
-					}
-					if componentLabelVal, exist := unstrob.GetLabels()["component"]; !exist || componentLabelVal != "ocm-controlplane" {
-						shouldEnqueue = false
+				if c.direction == SyncUp {
+					// check the managedcluster CRD to make sure this is a hub controlplane
+					if gvr.Resource == "customresourcedefinitions" {
+						unstrob, ok := obj.(*unstructured.Unstructured)
+						if !ok {
+							shouldEnqueue = false
+						}
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+							shouldEnqueue = false
+						}
 					}
 				}
-				if gvr.Resource == "clustermanagementaddons" {
-					shouldEnqueue = false
-				}
+
 				if shouldEnqueue {
 					c.AddToQueue(*gvr, obj)
 				}
