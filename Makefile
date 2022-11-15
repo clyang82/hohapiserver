@@ -3,7 +3,8 @@
 GOBIN := $(shell go env GOPATH)/bin
 REGISTRY ?= quay.io/clyang82
 IMAGE_TAG ?= latest
-
+TMP_BIN ?= /tmp/cr-tests-bin
+GO_TEST ?= go test -v
 
 all: fix fmt vet lint test tidy build
 
@@ -40,3 +41,10 @@ vet:
 
 clean:
 	rm -rf apiserver.local.config default.etcd bin/
+
+
+setup_envtest:
+	GOBIN=${TMP_BIN} go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+unit-tests-server: setup_envtest
+	KUBEBUILDER_ASSETS="$(shell ${TMP_BIN}/setup-envtest use --use-env -p path)" ${GO_TEST} `go list ./server/... | grep -v test`

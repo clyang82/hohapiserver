@@ -33,22 +33,27 @@ type PolicySummarySpec struct {
 type PolicySummaryStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Compliant    uint32                    `json:"compliant,omitempty"`
-	NonCompliant uint32                    `json:"noncompliant,omitempty"`
-	RegionalHubs []RegionalHubPolicyStatus `json:"regionalhubs,omitempty"`
+	// +kubebuilder:default:=0
+	Compliant uint32 `json:"compliant"`
+	// +kubebuilder:default:=0
+	NonCompliant uint32                    `json:"noncompliant"`
+	RegionalHubs []RegionalHubPolicyStatus `json:"regionalHubs,omitempty"`
 }
 
 type RegionalHubPolicyStatus struct {
-	Name         string `json:"name,omitempty"`
-	Compliant    uint32 `json:"compliant,omitempty"`
-	NonCompliant uint32 `json:"noncompliant,omitempty"`
+	Name string `json:"name,omitempty"`
+	// +kubebuilder:default:=0
+	Compliant uint32 `json:"compliant"`
+	// +kubebuilder:default:=0
+	NonCompliant uint32 `json:"noncompliant"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-// +kubebuilder:resource:scope="Cluster",shortName={"plcs"}
-
 // PolicySummary is the Schema for the policysummaries API
+
+//+k8s:openapi-gen=true
+//+kubebuilder:object:root=true
+//+kubebuilder:resource:scope="Cluster",shortName={"plcs"}
+//+kubebuilder:subresource:status
 type PolicySummary struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

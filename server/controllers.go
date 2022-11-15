@@ -168,7 +168,7 @@ func (c *globalHubController) processNextWorkItem(ctx context.Context) bool {
 func (c *globalHubController) process(ctx context.Context, key string) error {
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
-		klog.Errorf("invalid key: %q: %v", key, err)
+		klog.Errorf("invalid key: %q: %w", key, err)
 		return nil
 	}
 
@@ -184,12 +184,12 @@ func (c *globalHubController) process(ctx context.Context, key string) error {
 		return nil
 	}
 	if err != nil {
-		klog.Errorf("get object(%s/%s) error %v", namespace, name, err)
+		klog.Errorf("get object(%s/%s) error %w", namespace, name, err)
 		return nil
 	}
 
 	if err != c.reconcile(ctx, item) {
-		klog.Errorf("reconcile object(%s/%s) error %v", namespace, name, err)
+		klog.Errorf("reconcile object(%s/%s) error %w", namespace, name, err)
 		return err
 	}
 	return nil

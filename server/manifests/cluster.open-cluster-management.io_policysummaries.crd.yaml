@@ -20,7 +20,6 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PolicySummary is the Schema for the policysummaries API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -41,27 +40,37 @@ spec:
             description: PolicySummaryStatus defines the observed state of PolicySummary
             properties:
               compliant:
+                default: 0
                 description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
                   of cluster Important: Run "make" to regenerate code after modifying
                   this file'
                 format: int32
                 type: integer
               noncompliant:
+                default: 0
                 format: int32
                 type: integer
-              regionalhubs:
+              regionalHubs:
                 items:
                   properties:
                     compliant:
+                      default: 0
                       format: int32
                       type: integer
                     name:
                       type: string
                     noncompliant:
+                      default: 0
                       format: int32
                       type: integer
+                  required:
+                  - compliant
+                  - noncompliant
                   type: object
                 type: array
+            required:
+            - compliant
+            - noncompliant
             type: object
         type: object
     served: true
