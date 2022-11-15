@@ -54,7 +54,7 @@ func NewSpecSyncer(from, to *rest.Config) (*Controller, error) {
 	fromClient := dynamic.NewForConfigOrDie(from)
 	toClient := dynamic.NewForConfigOrDie(to)
 
-	return New(fromClient, toClient, SyncDown)
+	return New(fromClient, toClient, from, SyncDown)
 }
 
 func (c *Controller) deleteFromDownstream(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error {

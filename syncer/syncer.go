@@ -68,6 +68,7 @@ type Controller struct {
 	queue workqueue.RateLimitingInterface
 
 	fromInformers dynamicinformer.DynamicSharedInformerFactory
+	fromConfig    *rest.Config
 	toClient      dynamic.Interface
 
 	upsertFn  UpsertFunc
@@ -78,7 +79,7 @@ type Controller struct {
 }
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
-func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Controller, error) {
+func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direction SyncDirection) (*Controller, error) {
 	controllerName := string(direction) + "--regional-hub-->global-hub"
 	if direction == SyncDown {
 		controllerName = string(direction) + "--global-hub-->regional-hub"
@@ -86,10 +87,11 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "globalhub-"+controllerName)
 
 	c := Controller{
-		name:      controllerName,
-		queue:     queue,
-		toClient:  toClient,
-		direction: direction,
+		name:       controllerName,
+		queue:      queue,
+		toClient:   toClient,
+		fromConfig: fromConfig,
+		direction:  direction,
 	}
 
 	if direction == SyncDown {
@@ -105,6 +107,8 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 		c.gvrs = []string{
 			"policies.v1.policy.open-cluster-management.io",
 			"managedclusters.v1.cluster.open-cluster-management.io",
+			"clustermanagementaddons.v1alpha1.addon.open-cluster-management.io",
+			"customresourcedefinitions.v1.apiextensions.k8s.io",
 		}
 	}
 
@@ -120,19 +124,71 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 		gvr, _ := schema.ParseResourceArg(gvrstr)
 
 		fromInformers.ForResource(*gvr).Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) { c.AddToQueue(*gvr, obj) },
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				if c.direction == SyncDown {
-					if !deepEqualApartFromStatus(oldObj, newObj) {
-						c.AddToQueue(*gvr, newObj)
+			AddFunc: func(obj interface{}) {
+				shouldEnqueue := true
+				if c.direction == SyncUp {
+					// check the managedcluster CRD to make sure this is a hub controlplane
+					if gvr.Resource == "customresourcedefinitions" {
+						unstrob, ok := obj.(*unstructured.Unstructured)
+						if !ok {
+							shouldEnqueue = false
+						}
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+							shouldEnqueue = false
+						}
 					}
-				} else {
-					if !deepEqualStatus(oldObj, newObj) {
-						c.AddToQueue(*gvr, newObj)
+				}
+
+				if shouldEnqueue {
+					c.AddToQueue(*gvr, obj)
+				}
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				shouldEnqueue := true
+				if c.direction == SyncUp {
+					// check the managedcluster CRD to make sure this is a hub controlplane
+					if gvr.Resource == "customresourcedefinitions" {
+						unstrob, ok := newObj.(*unstructured.Unstructured)
+						if !ok {
+							shouldEnqueue = false
+						}
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+							shouldEnqueue = false
+						}
+					}
+				}
+
+				if shouldEnqueue {
+					if c.direction == SyncDown {
+						if !deepEqualApartFromStatus(oldObj, newObj) {
+							c.AddToQueue(*gvr, newObj)
+						}
+					} else {
+						if !deepEqualStatus(oldObj, newObj) {
+							c.AddToQueue(*gvr, newObj)
+						}
 					}
 				}
 			},
-			DeleteFunc: func(obj interface{}) { c.AddToQueue(*gvr, obj) },
+			DeleteFunc: func(obj interface{}) {
+				shouldEnqueue := true
+				if c.direction == SyncUp {
+					// check the managedcluster CRD to make sure this is a hub controlplane
+					if gvr.Resource == "customresourcedefinitions" {
+						unstrob, ok := obj.(*unstructured.Unstructured)
+						if !ok {
+							shouldEnqueue = false
+						}
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+							shouldEnqueue = false
+						}
+					}
+				}
+
+				if shouldEnqueue {
+					c.AddToQueue(*gvr, obj)
+				}
+			},
 		})
 
 		klog.InfoS("Set up informer", "direction", c.direction, "gvr", gvr)
