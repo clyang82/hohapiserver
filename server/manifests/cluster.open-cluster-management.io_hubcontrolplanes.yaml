@@ -35,19 +35,33 @@ spec:
           spec:
             description: HubControlPlaneSpec defines the desired state of HubControlPlane
             properties:
+              endpoint:
+                type: string
+            type: object
+          status:
+            description: HubControlPlaneStatus defines the observed state of HubControlPlane
+            properties:
               addons:
                 items:
                   type: string
                 type: array
-              endpoint:
-                type: string
               managedClusters:
-                items:
-                  type: string
-                type: array
-            type: object
-          status:
-            description: HubControlPlaneStatus defines the observed state of HubControlPlane
+                description: ManagedClustersStatus defines managed clusters with available,
+                  unavailable and unknown status
+                properties:
+                  available:
+                    items:
+                      type: string
+                    type: array
+                  unavailable:
+                    items:
+                      type: string
+                    type: array
+                  unknown:
+                    items:
+                      type: string
+                    type: array
+                type: object
             type: object
         type: object
     served: true

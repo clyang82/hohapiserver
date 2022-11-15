@@ -6,13 +6,20 @@ import (
 
 // HubControlPlaneSpec defines the desired state of HubControlPlane
 type HubControlPlaneSpec struct {
-	Endpoint        string   `json:"endpoint,omitempty"`
-	ManagedClusters []string `json:"managedClusters,omitempty"`
-	Addons          []string `json:"addons,omitempty"`
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // HubControlPlaneStatus defines the observed state of HubControlPlane
 type HubControlPlaneStatus struct {
+	Addons          []string              `json:"addons,omitempty"`
+	ManagedClusters ManagedClustersStatus `json:"managedClusters,omitempty"`
+}
+
+// ManagedClustersStatus defines managed clusters with available, unavailable and unknown status
+type ManagedClustersStatus struct {
+	Available   []string `json:"available,omitempty"`
+	Unavailable []string `json:"unavailable,omitempty"`
+	Unknown     []string `json:"unknown,omitempty"`
 }
 
 //+kubebuilder:object:root=true

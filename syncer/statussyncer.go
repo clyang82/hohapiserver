@@ -135,6 +135,13 @@ func (c *Controller) applyToUpstream(ctx context.Context, gvr schema.GroupVersio
 		klog.Infof("Error upserting %s %s from downstream %s: %v", gvr.Resource, upstreamObj.GetName(), downstreamObj.GetName(), err)
 		return err
 	}
+
+	// update status subresource
+	if _, err := c.toClient.Resource(gvr).Patch(ctx, upstreamObj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{FieldManager: syncerApplyManager, Force: pointer.Bool(true)}, "status"); err != nil {
+		klog.Infof("Error updating status for %s %s from downstream %s: %v", gvr.Resource, upstreamObj.GetName(), downstreamObj.GetName(), err)
+		return err
+	}
+
 	klog.Infof("Upserted %s %s from upstream %s", gvr.Resource, upstreamObj.GetName(), downstreamObj.GetName())
 
 	return nil
@@ -146,14 +153,40 @@ func (c *Controller) applyHubControlPlaneInUpstream(ctx context.Context, gvr sch
 		return fmt.Errorf("empty environment variable: POD_NAMESPACE")
 	}
 
-	managedClusters := []string{}
+	managedClustersStatus := hubcontrolplanev1alpha1.ManagedClustersStatus{}
 	for _, managedClusterItem := range c.fromInformers.ForResource(managedClusterGVR).Informer().GetIndexer().List() {
-		managedClusterUnstrob, isUnstructured := managedClusterItem.(*unstructured.Unstructured)
+		managedClusterUnstrobj, isUnstructured := managedClusterItem.(*unstructured.Unstructured)
 		if !isUnstructured {
 			return fmt.Errorf("object is expected to be Unstructured, but is %T", managedClusterItem)
 		}
 
-		managedClusters = append(managedClusters, managedClusterUnstrob.GetName())
+		managedClusterUnstrStatus, ok := managedClusterUnstrobj.Object["status"].(map[string]interface{})
+		if ok {
+			managedClusterUnstrConditions, ok := managedClusterUnstrStatus["conditions"].([]interface{})
+			if ok {
+				for _, condObj := range managedClusterUnstrConditions {
+					cond := condObj.(map[string]interface{})
+					if cond["type"].(string) == "ManagedClusterConditionAvailable" {
+						switch cond["status"].(string) {
+						case string(metav1.ConditionTrue):
+							managedClustersStatus.Available = append(managedClustersStatus.Available, managedClusterUnstrobj.GetName())
+						case string(metav1.ConditionFalse):
+							managedClustersStatus.Unavailable = append(managedClustersStatus.Unavailable, managedClusterUnstrobj.GetName())
+						case string(metav1.ConditionUnknown):
+							managedClustersStatus.Unknown = append(managedClustersStatus.Unknown, managedClusterUnstrobj.GetName())
+						default:
+							managedClustersStatus.Unknown = append(managedClustersStatus.Unknown, managedClusterUnstrobj.GetName())
+						}
+
+						break
+					}
+				}
+			} else { // case for managed cluster with no condition
+				managedClustersStatus.Unknown = append(managedClustersStatus.Unknown, managedClusterUnstrobj.GetName())
+			}
+		} else { // case for managed cluster with empty status
+			managedClustersStatus.Unknown = append(managedClustersStatus.Unknown, managedClusterUnstrobj.GetName())
+		}
 	}
 
 	addons := []string{}
@@ -175,8 +208,10 @@ func (c *Controller) applyHubControlPlaneInUpstream(ctx context.Context, gvr sch
 			Name: syncerNamespace,
 		},
 		Spec: hubcontrolplanev1alpha1.HubControlPlaneSpec{
-			Endpoint:        c.fromConfig.Host,
-			ManagedClusters: managedClusters,
+			Endpoint: c.fromConfig.Host,
+		},
+		Status: hubcontrolplanev1alpha1.HubControlPlaneStatus{
+			ManagedClusters: managedClustersStatus,
 			Addons:          addons,
 		},
 	}
