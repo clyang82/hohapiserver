@@ -12,27 +12,27 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
-	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	policysummaryv1alpha1 "github.com/clyang82/multicluster-global-hub-lite/apis/policysummary/v1alpha1"
+	// policysummaryv1alpha1 "github.com/clyang82/multicluster-global-hub-lite/apis/policysummary/v1alpha1"
+	policyv1 "github.com/clyang82/multicluster-global-hub-lite/apis/policy/v1"
 )
+
+const GlobalHubPolicyNamespace = "global-hub.open-cluster-management.io/original-namespace"
 
 type policyController struct {
 	Controller
-	name             string
-	policyGVR        schema.GroupVersionResource
-	client           dynamic.Interface
-	policySummaryGVR schema.GroupVersionResource
-	createInstance   func() client.Object
+	name           string
+	policyGVR      schema.GroupVersionResource
+	client         dynamic.Interface
+	createInstance func() client.Object
 }
 
 func NewPolicyController(dynamicClient dynamic.Interface) *policyController {
 	return &policyController{
-		name:             "policy-controller",
-		policyGVR:        policyv1.SchemeGroupVersion.WithResource("policies"),
-		policySummaryGVR: policysummaryv1alpha1.SchemeBuilder.GroupVersion.WithResource("policysummaries"),
-		client:           dynamicClient,
+		name:      "policy-controller",
+		policyGVR: policyv1.SchemeGroupVersion.WithResource("policies"),
+		client:    dynamicClient,
 		createInstance: func() client.Object {
 			return &policyv1.Policy{}
 		},
@@ -79,37 +79,23 @@ func (c *policyController) ReconcileFunc() func(ctx context.Context, obj interfa
 }
 
 func (c *policyController) updatePolicySummary(ctx context.Context, policy *policyv1.Policy) error {
-	policySummary := &policysummaryv1alpha1.PolicySummary{}
-	unStructObj, err := c.client.Resource(c.policySummaryGVR).Get(ctx, policy.GetName(), metav1.GetOptions{})
+	unStructObj, err := c.client.Resource(c.policyGVR).Namespace(policy.GetNamespace()).Get(ctx, policy.GetName(), metav1.GetOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
-	if errors.IsNotFound(err) {
-		policySummary = &policysummaryv1alpha1.PolicySummary{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "PolicySummary",
-				APIVersion: "cluster.open-cluster-management.io/v1alpha1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: policy.GetName(),
-			},
-		}
-		unStructMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(policySummary)
+	if err != nil {
+		unStructMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(policy)
 		if err != nil {
 			return err
 		}
-		unStructObj, err = c.client.Resource(c.policySummaryGVR).Create(ctx,
-			&unstructured.Unstructured{Object: unStructMap}, metav1.CreateOptions{})
+		unStructObj, err = c.client.Resource(c.policyGVR).Namespace(policy.Namespace).Create(ctx, &unstructured.Unstructured{Object: unStructMap}, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
 	}
+	policy.SetResourceVersion(unStructObj.GetResourceVersion())
 
-	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unStructObj.Object, policySummary); err != nil {
-		return err
-	}
-
-	newRegionalHub := policysummaryv1alpha1.RegionalHubPolicyStatus{
+	newComplianceSummary := policyv1.ClusterSummary{
 		Name:         policy.GetNamespace(), // TODO: the policy namespace is the identity of global hub syncer
 		Compliant:    0,
 		NonCompliant: 0,
@@ -117,35 +103,36 @@ func (c *policyController) updatePolicySummary(ctx context.Context, policy *poli
 	for _, cluster := range policy.Status.Status {
 		switch cluster.ComplianceState {
 		case policyv1.Compliant:
-			newRegionalHub.Compliant++
+			newComplianceSummary.Compliant++
 		case policyv1.NonCompliant:
-			newRegionalHub.NonCompliant++
+			newComplianceSummary.NonCompliant++
 		default:
 			klog.Warningf("cluster %s with unknown status %s", cluster.ClusterName, cluster.ComplianceState)
 		}
 	}
 
 	exist := false
-	for index, regionalHub := range policySummary.Status.RegionalHubs {
-		if newRegionalHub.Name == regionalHub.Name {
+	for index, complianceSummary := range policy.Status.ComplianceSummary.Summaries {
+		if newComplianceSummary.Name == complianceSummary.Name {
 			exist = true
-			policySummary.Status.Compliant += (newRegionalHub.Compliant - regionalHub.Compliant)
-			policySummary.Status.NonCompliant += (newRegionalHub.NonCompliant - regionalHub.NonCompliant)
-			policySummary.Status.RegionalHubs[index].Compliant = newRegionalHub.Compliant
-			policySummary.Status.RegionalHubs[index].NonCompliant = newRegionalHub.NonCompliant
+			policy.Status.ComplianceSummary.Compliant += (newComplianceSummary.Compliant - complianceSummary.Compliant)
+			policy.Status.ComplianceSummary.NonCompliant += (newComplianceSummary.NonCompliant - complianceSummary.NonCompliant)
+			policy.Status.ComplianceSummary.Summaries[index].Compliant = newComplianceSummary.Compliant
+			policy.Status.ComplianceSummary.Summaries[index].NonCompliant = newComplianceSummary.NonCompliant
 		}
 	}
 	if !exist {
-		policySummary.Status.Compliant += newRegionalHub.Compliant
-		policySummary.Status.NonCompliant += newRegionalHub.NonCompliant
-		policySummary.Status.RegionalHubs = append(policySummary.Status.RegionalHubs, newRegionalHub)
+		policy.Status.ComplianceSummary.Compliant += newComplianceSummary.Compliant
+		policy.Status.ComplianceSummary.NonCompliant += newComplianceSummary.NonCompliant
+		policy.Status.ComplianceSummary.Summaries = append(policy.Status.ComplianceSummary.Summaries, newComplianceSummary)
 	}
 
-	unStructMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(policySummary)
+	unStructMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(policy)
 	if err != nil {
 		return err
 	}
-	if _, err := c.client.Resource(c.policySummaryGVR).UpdateStatus(context.TODO(),
+
+	if _, err := c.client.Resource(c.policyGVR).Namespace(policy.Namespace).UpdateStatus(context.TODO(),
 		&unstructured.Unstructured{Object: unStructMap}, metav1.UpdateOptions{}); err != nil {
 		return err
 	}

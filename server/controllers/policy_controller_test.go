@@ -14,33 +14,29 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	policysummaryv1alpha1 "github.com/clyang82/multicluster-global-hub-lite/apis/policysummary/v1alpha1"
+	policyv1 "github.com/clyang82/multicluster-global-hub-lite/apis/policy/v1"
 	"github.com/clyang82/multicluster-global-hub-lite/server/controllers"
 )
 
 var (
-	cfg              *rest.Config
-	client           dynamic.Interface
-	policySummaryGVR schema.GroupVersionResource
+	cfg       *rest.Config
+	client    dynamic.Interface
+	testEnv   *envtest.Environment
+	policyGVR schema.GroupVersionResource
 )
 
 func TestMain(m *testing.M) {
-	policySummaryGVR = policysummaryv1alpha1.SchemeBuilder.GroupVersion.WithResource("policysummaries")
-
 	// start testEnv
-	testEnv := &envtest.Environment{
+	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "manifests"),
 		},
 	}
-	var err error
-	if err != nil {
-		panic(err)
-	}
+	policyGVR = policyv1.SchemeGroupVersion.WithResource("policies")
 
+	var err error
 	cfg, err = testEnv.Start()
 	if err != nil {
 		panic(err)
@@ -70,9 +66,17 @@ func TestPolicySummary(t *testing.T) {
 
 	// 2. create policy test-policy in ns1
 	policy1 := &policyv1.Policy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Policy",
+			APIVersion: "policy.open-cluster-management.io/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-policy",
-			Namespace: "ns1",
+			Namespace: "default",
+		},
+		Spec: policyv1.PolicySpec{
+			Disabled:        true,
+			PolicyTemplates: make([]*policyv1.PolicyTemplate, 0),
 		},
 		Status: policyv1.PolicyStatus{
 			Status: make([]*policyv1.CompliancePerClusterStatus, 0),
@@ -95,66 +99,30 @@ func TestPolicySummary(t *testing.T) {
 		panic(err)
 	}
 	if err := reconcileFunc(context.TODO(), &unstructured.Unstructured{Object: unStructMap}); err != nil {
-		t.Fatal(fmt.Errorf("error to reconcile policySummary: %w", err))
+		t.Fatal(fmt.Errorf("error to reconcile policy: %w", err))
 	}
 
-	// 4. verify policySummary
-	ps, err := getPolicySummary(policy1.GetName())
-	if err != nil {
-		t.Fatal(fmt.Errorf("error the policySummary: %w", err))
+	// 4. verify the reconcile policy
+	newPolicy := &policyv1.Policy{}
+	if err := getPolicyWithSummary(policy1.Namespace, policy1.Name, newPolicy); err != nil {
+		t.Fatal(fmt.Errorf("error to get the reconciled policy: %w", err))
 	}
-	if ps.Status.Compliant != 1 || ps.Status.NonCompliant != 1 {
-		t.Fatalf("policySummary with incorrect status %v", ps.Status)
+	t.Log(prettyPrint(newPolicy))
+	if newPolicy.Status.ComplianceSummary.Compliant != 1 || newPolicy.Status.ComplianceSummary.NonCompliant != 1 {
+		t.Fatal(fmt.Errorf("compliance summary is incorrect: %s", prettyPrint(newPolicy)))
 	}
-
-	// 5. sync another regional hub policy status
-	status3 := &policyv1.CompliancePerClusterStatus{
-		ComplianceState:  policyv1.Compliant,
-		ClusterName:      "cluster1",
-		ClusterNamespace: "default",
-	}
-	statuses2 := make([]*policyv1.CompliancePerClusterStatus, 0)
-	statuses2 = append(statuses2, status3)
-	policy2 := &policyv1.Policy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-policy",
-			Namespace: "ns2",
-		},
-		Status: policyv1.PolicyStatus{
-			Status: statuses2,
-		},
-	}
-	unStructMap, err = runtime.DefaultUnstructuredConverter.ToUnstructured(policy2)
-	if err != nil {
-		panic(err)
-	}
-	if err := reconcileFunc(context.TODO(), &unstructured.Unstructured{Object: unStructMap}); err != nil {
-		t.Error(err)
-	}
-
-	// 6. verify policySummary
-	ps, err = getPolicySummary(policy1.GetName())
-	if err != nil {
-		t.Fatal(fmt.Errorf("error the policySummary: %w", err))
-	}
-	if ps.Status.Compliant != 2 || ps.Status.NonCompliant != 1 {
-		t.Fatalf("policySummary with incorrect status %v", ps.Status)
-	}
-
-	t.Log(prettyPrint(ps))
 }
 
-func getPolicySummary(name string) (*policysummaryv1alpha1.PolicySummary, error) {
-	unObj, err := client.Resource(policySummaryGVR).Get(context.TODO(), name, metav1.GetOptions{})
+func getPolicyWithSummary(namespace, name string, policy *policyv1.Policy) error {
+	unObj, err := client.Resource(policyGVR).Namespace(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
-		return nil, err
+		return err
 	}
-	policySummary := &policysummaryv1alpha1.PolicySummary{}
-	err = runtime.DefaultUnstructuredConverter.FromUnstructured(unObj.UnstructuredContent(), policySummary)
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(unObj.UnstructuredContent(), policy)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return policySummary, nil
+	return nil
 }
 
 func prettyPrint(obj any) string {

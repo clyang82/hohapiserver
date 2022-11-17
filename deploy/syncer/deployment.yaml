@@ -20,6 +20,10 @@ spec:
         - "/syncer"
         - "--from-kubeconfig=/multicluster-global-hub-config/kubeconfig"
         env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         name: multicluster-global-hub-syncer
         image: quay.io/myan/multicluster-global-hub-syncer:latest
         imagePullPolicy: Always
