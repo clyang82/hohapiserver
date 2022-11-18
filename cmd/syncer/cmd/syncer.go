@@ -45,7 +45,6 @@ func NewSyncerCommand() *cobra.Command {
 }
 
 func Run(options *synceroptions.Options, ctx context.Context) error {
-
 	globalhubConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: options.FromKubeconfig}, nil).ClientConfig()
 	if err != nil {
@@ -53,7 +52,6 @@ func Run(options *synceroptions.Options, ctx context.Context) error {
 	}
 
 	toConfig, err := clientcmd.BuildConfigFromFlags("", "")
-
 	if err != nil {
 		return err
 	}
@@ -63,6 +61,7 @@ func Run(options *synceroptions.Options, ctx context.Context) error {
 		&syncer.SyncerConfig{
 			UpstreamConfig:   globalhubConfig,
 			DownstreamConfig: toConfig,
+			SyncerNamespace:  options.PodNamespace,
 		},
 		numThreads,
 	); err != nil {

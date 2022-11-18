@@ -31,6 +31,9 @@ const (
 
 	// SyncUp indicates a syncer watches resources on the leaft cluster and applies the status to the global hub
 	SyncUp SyncDirection = "up"
+
+	// if the Global Hub resources with this label, it means the resources is ready to be syncDown
+	GlobalHubPolicyNamespaceLabel = "global-hub.open-cluster-management.io/original-namespace"
 )
 
 // SyncerConfig defines the syncer configuration that is guaranteed to
@@ -38,18 +41,18 @@ const (
 type SyncerConfig struct {
 	UpstreamConfig   *rest.Config
 	DownstreamConfig *rest.Config
+	SyncerNamespace  string
 }
 
 func StartSyncer(ctx context.Context, cfg *SyncerConfig, numSyncerThreads int) error {
-
 	klog.Infof("Creating spec syncer")
-	specSyncer, err := NewSpecSyncer(cfg.UpstreamConfig, cfg.DownstreamConfig)
+	specSyncer, err := NewSpecSyncer(cfg.UpstreamConfig, cfg.DownstreamConfig, cfg.SyncerNamespace)
 	if err != nil {
 		return err
 	}
 
 	klog.Infof("Creating status syncer")
-	statusSyncer, err := NewStatusSyncer(cfg.DownstreamConfig, cfg.UpstreamConfig)
+	statusSyncer, err := NewStatusSyncer(cfg.DownstreamConfig, cfg.UpstreamConfig, cfg.SyncerNamespace)
 	if err != nil {
 		return err
 	}
@@ -60,12 +63,15 @@ func StartSyncer(ctx context.Context, cfg *SyncerConfig, numSyncerThreads int) e
 	return nil
 }
 
-type UpsertFunc func(ctx context.Context, gvr schema.GroupVersionResource, namespace string, unstrob *unstructured.Unstructured) error
-type DeleteFunc func(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error
+type (
+	UpsertFunc func(ctx context.Context, gvr schema.GroupVersionResource, namespace string, unstrob *unstructured.Unstructured) error
+	DeleteFunc func(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error
+)
 
 type Controller struct {
-	name  string
-	queue workqueue.RateLimitingInterface
+	name      string
+	namespace string
+	queue     workqueue.RateLimitingInterface
 
 	fromInformers dynamicinformer.DynamicSharedInformerFactory
 	toClient      dynamic.Interface
@@ -78,7 +84,7 @@ type Controller struct {
 }
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
-func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Controller, error) {
+func New(fromClient, toClient dynamic.Interface, direction SyncDirection, syncerNamespace string) (*Controller, error) {
 	controllerName := string(direction) + "--regional-hub-->global-hub"
 	if direction == SyncDown {
 		controllerName = string(direction) + "--global-hub-->regional-hub"
@@ -87,6 +93,7 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 
 	c := Controller{
 		name:      controllerName,
+		namespace: syncerNamespace,
 		queue:     queue,
 		toClient:  toClient,
 		direction: direction,
@@ -120,19 +127,36 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection) (*Cont
 		gvr, _ := schema.ParseResourceArg(gvrstr)
 
 		fromInformers.ForResource(*gvr).Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) { c.AddToQueue(*gvr, obj) },
+			AddFunc: func(obj interface{}) {
+				unObj := obj.(*unstructured.Unstructured)
+				originalNamespace, ok := unObj.GetLabels()[GlobalHubPolicyNamespaceLabel]
+				// only process the global hub resource
+				if ok && originalNamespace == unObj.GetNamespace() {
+					c.AddToQueue(*gvr, obj)
+				}
+			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				if c.direction == SyncDown {
-					if !deepEqualApartFromStatus(oldObj, newObj) {
-						c.AddToQueue(*gvr, newObj)
-					}
-				} else {
-					if !deepEqualStatus(oldObj, newObj) {
-						c.AddToQueue(*gvr, newObj)
+				unObj := newObj.(*unstructured.Unstructured)
+				originalNamespace, ok := unObj.GetLabels()[GlobalHubPolicyNamespaceLabel]
+				if ok && originalNamespace == unObj.GetNamespace() {
+					if c.direction == SyncDown {
+						if !deepEqualApartFromStatus(oldObj, newObj) {
+							c.AddToQueue(*gvr, newObj)
+						}
+					} else {
+						if !deepEqualStatus(oldObj, newObj) {
+							c.AddToQueue(*gvr, newObj)
+						}
 					}
 				}
 			},
-			DeleteFunc: func(obj interface{}) { c.AddToQueue(*gvr, obj) },
+			DeleteFunc: func(obj interface{}) {
+				unObj := obj.(*unstructured.Unstructured)
+				originalNamespace, ok := unObj.GetLabels()[GlobalHubPolicyNamespaceLabel]
+				if ok && originalNamespace == unObj.GetNamespace() {
+					c.AddToQueue(*gvr, obj)
+				}
+			},
 		})
 
 		klog.InfoS("Set up informer", "direction", c.direction, "gvr", gvr)

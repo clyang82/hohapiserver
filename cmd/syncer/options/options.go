@@ -9,6 +9,7 @@ import (
 type Options struct {
 	FromKubeconfig string
 	ToKubeconfig   string
+	PodNamespace   string
 }
 
 func NewOptions() *Options {
@@ -17,6 +18,7 @@ func NewOptions() *Options {
 
 func (options *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&options.FromKubeconfig, "from-kubeconfig", options.FromKubeconfig, "Kubeconfig file for -from cluster.")
+	fs.StringVar(&options.PodNamespace, "pod-namespace", "default", "The running namespace of the syncer pod")
 }
 
 func (options *Options) Complete() error {

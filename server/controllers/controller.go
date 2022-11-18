@@ -23,6 +23,8 @@ type Server interface {
 func AddControllers(server Server) {
 	controllers := []Controller{
 		NewPolicyController(server.GetClient()),
+		NewPlacementBindingController(server.GetClient()),
+		NewPlacementRuleController(server.GetClient()),
 	}
 
 	for _, controller := range controllers {

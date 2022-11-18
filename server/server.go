@@ -89,6 +89,7 @@ func (s *GlobalHubApiServer) RunGlobalHubApiServer(ctx context.Context) error {
 		return err
 	}
 
+	// register controller to the api server
 	controllers.AddControllers(s)
 
 	// TODO: kubectl explain currently failing on crd resources, but works on apiservices

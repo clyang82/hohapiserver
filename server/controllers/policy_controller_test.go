@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -64,7 +65,15 @@ func TestPolicySummary(t *testing.T) {
 	policyController := controllers.NewPolicyController(client)
 	reconcileFunc := policyController.ReconcileFunc()
 
-	// 2. create policy test-policy in ns1
+	// 2. create namespace for global hub and syncer
+	if err := createNamespace(context.TODO(), "global-hub"); err != nil {
+		t.Fatal(fmt.Errorf("error to namespace global-hub: %w", err))
+	}
+	if err := createNamespace(context.TODO(), "syncer"); err != nil {
+		t.Fatal(fmt.Errorf("error to namespace syncer: %w", err))
+	}
+
+	// 2. create policy test-policy in global-hub policy
 	policy1 := &policyv1.Policy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Policy",
@@ -72,7 +81,10 @@ func TestPolicySummary(t *testing.T) {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-policy",
-			Namespace: "default",
+			Namespace: "global-hub",
+			Labels: map[string]string{
+				controllers.GlobalHubPolicyNamespaceLabel: "global-hub",
+			},
 		},
 		Spec: policyv1.PolicySpec{
 			Disabled:        true,
@@ -82,6 +94,17 @@ func TestPolicySummary(t *testing.T) {
 			Status: make([]*policyv1.CompliancePerClusterStatus, 0),
 		},
 	}
+
+	unMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(policy1)
+	if err != nil {
+		t.Error(err)
+	}
+	if _, err = client.Resource(policyGVR).Namespace("global-hub").Create(context.TODO(), &unstructured.Unstructured{Object: unMap}, metav1.CreateOptions{}); err != nil {
+		t.Error(err)
+	}
+
+	// 3. reconcile global hub policy test-policy from syncer's policy
+	policy1.SetNamespace("syncer")
 	policy1.Status.Status = append(policy1.Status.Status, &policyv1.CompliancePerClusterStatus{
 		ComplianceState:  policyv1.Compliant,
 		ClusterName:      "cluster1",
@@ -104,7 +127,7 @@ func TestPolicySummary(t *testing.T) {
 
 	// 4. verify the reconcile policy
 	newPolicy := &policyv1.Policy{}
-	if err := getPolicyWithSummary(policy1.Namespace, policy1.Name, newPolicy); err != nil {
+	if err := getPolicyWithSummary("global-hub", policy1.Name, newPolicy); err != nil {
 		t.Fatal(fmt.Errorf("error to get the reconciled policy: %w", err))
 	}
 	t.Log(prettyPrint(newPolicy))
@@ -121,6 +144,26 @@ func getPolicyWithSummary(namespace, name string, policy *policyv1.Policy) error
 	err = runtime.DefaultUnstructuredConverter.FromUnstructured(unObj.UnstructuredContent(), policy)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func createNamespace(ctx context.Context, name string) error {
+	gvr := schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+
+	newNamespace := &unstructured.Unstructured{}
+	newNamespace.SetAPIVersion("v1")
+	newNamespace.SetKind("Namespace")
+	newNamespace.SetName(name)
+
+	if _, err := client.Resource(gvr).Create(ctx, newNamespace, metav1.CreateOptions{}); err != nil {
+		if !errors.IsAlreadyExists(err) {
+			return err
+		}
 	}
 	return nil
 }
