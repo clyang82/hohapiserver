@@ -93,12 +93,12 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "globalhub-"+controllerName)
 
 	c := Controller{
-		name:      controllerName,
-		namespace: syncerNamespace,
-		queue:     queue,
-		toClient:  toClient,
-    fromConfig: fromConfig,
-		direction: direction,
+		name:       controllerName,
+		namespace:  syncerNamespace,
+		queue:      queue,
+		toClient:   toClient,
+		fromConfig: fromConfig,
+		direction:  direction,
 	}
 
 	if direction == SyncDown {
@@ -133,27 +133,26 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 		fromInformers.ForResource(*gvr).Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				shouldEnqueue := true
-        unstrob, ok := obj.(*unstructured.Unstructured)
-        if !ok {
-          shouldEnqueue = false
-        }
+				unstrob, ok := obj.(*unstructured.Unstructured)
+				if !ok {
+					shouldEnqueue = false
+				}
 				if c.direction == SyncUp {
 					// check the managedcluster CRD to make sure this is a hub controlplane
 					if gvr.Resource == "customresourcedefinitions" {
-						
 						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
 							shouldEnqueue = false
 						}
 					}
-        } else {
-          // only process the resources in the global hub namesapces
-          if len(unstrob.GetNamespace()) > 0 {
-            originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
-            if !ok || originalNamespace != unstrob.GetNamespace() {
-              shouldEnqueue = false
-            }
-          }
-        }
+				} else {
+					// only process the resources in the global hub namespaces
+					if len(unstrob.GetNamespace()) > 0 {
+						originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
+						if !ok || originalNamespace != unstrob.GetNamespace() {
+							shouldEnqueue = false
+						}
+					}
+				}
 
 				if shouldEnqueue {
 					c.AddToQueue(*gvr, obj)
@@ -161,10 +160,10 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				shouldEnqueue := true
-        unstrob, ok := newObj.(*unstructured.Unstructured)
-        if !ok {
-          shouldEnqueue = false
-        }
+				unstrob, ok := newObj.(*unstructured.Unstructured)
+				if !ok {
+					shouldEnqueue = false
+				}
 				if c.direction == SyncUp {
 					// check the managedcluster CRD to make sure this is a hub controlplane
 					if gvr.Resource == "customresourcedefinitions" {
@@ -172,15 +171,15 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 							shouldEnqueue = false
 						}
 					}
-        } else {
-          // only process the resources in the global hub namesapces
-          if len(unstrob.GetNamespace()) > 0 {
-            originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
-            if !ok || originalNamespace != unstrob.GetNamespace() {
-              shouldEnqueue = false
-            }
-          }
-        }
+				} else {
+					// only process the resources in the global hub namespaces
+					if len(unstrob.GetNamespace()) > 0 {
+						originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
+						if !ok || originalNamespace != unstrob.GetNamespace() {
+							shouldEnqueue = false
+						}
+					}
+				}
 
 				if shouldEnqueue {
 					if c.direction == SyncDown {
@@ -195,11 +194,11 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 				}
 			},
 			DeleteFunc: func(obj interface{}) {
-        shouldEnqueue := true
-        unstrob, ok := obj.(*unstructured.Unstructured)
-        if !ok {
-          shouldEnqueue = false
-        }
+				shouldEnqueue := true
+				unstrob, ok := obj.(*unstructured.Unstructured)
+				if !ok {
+					shouldEnqueue = false
+				}
 				if c.direction == SyncUp {
 					// check the managedcluster CRD to make sure this is a hub controlplane
 					if gvr.Resource == "customresourcedefinitions" {
@@ -211,15 +210,15 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 							shouldEnqueue = false
 						}
 					}
-        } else {
-          // only process the resources in the global hub namesapces
-          if len(unstrob.GetNamespace()) > 0 {
-            originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
-            if !ok || originalNamespace != unstrob.GetNamespace() {
-              shouldEnqueue = false
-            }
-          }
-        }
+				} else {
+					// only process the resources in the global hub namespaces
+					if len(unstrob.GetNamespace()) > 0 {
+						originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
+						if !ok || originalNamespace != unstrob.GetNamespace() {
+							shouldEnqueue = false
+						}
+					}
+				}
 				if shouldEnqueue {
 					c.AddToQueue(*gvr, obj)
 				}

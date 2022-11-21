@@ -2,10 +2,15 @@ package server
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"time"
 
+	"gopkg.in/yaml.v2"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
@@ -14,6 +19,9 @@ import (
 	"github.com/clyang82/multicluster-global-hub-lite/server/controllers"
 	"github.com/clyang82/multicluster-global-hub-lite/server/etcd"
 )
+
+//go:embed manifests
+var crdManifestsFS embed.FS
 
 type GlobalHubApiServer struct {
 	postStartHooks   []postStartHookEntry
@@ -106,8 +114,27 @@ func (s *GlobalHubApiServer) RunGlobalHubApiServer(ctx context.Context) error {
 	return RunAggregator(aggregatorServer, ctx.Done())
 }
 
-// AddPostStartHook allows you to add a PostStartHook that gets passed to the underlying genericapiserver implementation.
-func (s *GlobalHubApiServer) AddPostStartHook(name string, hook genericapiserver.PostStartHookFunc) {
+func (s *GlobalHubApiServer) GetClient() dynamic.Interface {
+	return s.client
+}
+
+func (s *GlobalHubApiServer) RegisterController(controller controllers.Controller) {
+	c := controllers.NewGenericController(
+		s.ctx,
+		s.client,
+		s.informerFactory,
+		controller,
+	)
+
+	s.addPostStartHook(fmt.Sprintf("start-%s", controller.GetName()),
+		func(hookContext genericapiserver.PostStartHookContext) error {
+			go c.Run(s.ctx, 1)
+			return nil
+		})
+}
+
+// addPostStartHook allows you to add a PostStartHook that gets passed to the underlying genericapiserver implementation.
+func (s *GlobalHubApiServer) addPostStartHook(name string, hook genericapiserver.PostStartHookFunc) {
 	// you could potentially add duplicate or invalid post start hooks here, but we'll let
 	// the genericapiserver implementation do its own validation during startup.
 	s.postStartHooks = append(s.postStartHooks, postStartHookEntry{
@@ -116,12 +143,45 @@ func (s *GlobalHubApiServer) AddPostStartHook(name string, hook genericapiserver
 	})
 }
 
-// AddPreShutdownHook allows you to add a PreShutdownHookFunc that gets passed to the underlying genericapiserver implementation.
-func (s *GlobalHubApiServer) AddPreShutdownHook(name string, hook genericapiserver.PreShutdownHookFunc) {
+// addPreShutdownHook allows you to add a PreShutdownHookFunc that gets passed to the underlying genericapiserver implementation.
+func (s *GlobalHubApiServer) addPreShutdownHook(name string, hook genericapiserver.PreShutdownHookFunc) {
 	// you could potentially add duplicate or invalid post start hooks here, but we'll let
 	// the genericapiserver implementation do its own validation during startup.
 	s.preShutdownHooks = append(s.preShutdownHooks, preShutdownHookEntry{
 		name: name,
 		hook: hook,
 	})
+}
+
+func (s *GlobalHubApiServer) installCRD(ctx context.Context) error {
+	controllerName := "global-hub-crd-controller"
+	s.addPostStartHook(fmt.Sprintf("start-%s", controllerName),
+		func(hookContext genericapiserver.PostStartHookContext) error {
+			fs.WalkDir(crdManifestsFS, "manifests", func(file string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+
+				if !d.IsDir() {
+					b, err := crdManifestsFS.ReadFile(file)
+					if err != nil {
+						return err
+					}
+					obj := &unstructured.Unstructured{}
+					err = yaml.Unmarshal(b, &obj)
+					if err != nil {
+						return err
+					}
+					_, err = s.client.
+						Resource(apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions")).
+						Create(context.TODO(), obj, metav1.CreateOptions{})
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			return nil
+		})
+	return nil
 }

@@ -1,70 +1,22 @@
-package server
+package controllers
 
 import (
 	"context"
-	"embed"
 	"fmt"
-	"io/fs"
 	"time"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
-
-	"github.com/clyang82/multicluster-global-hub-lite/server/controllers"
 )
 
-//go:embed manifests
-var crdManifestsFS embed.FS
-
-func (s *GlobalHubApiServer) installCRD(ctx context.Context) error {
-	controllerName := "global-hub-crd-controller"
-	s.AddPostStartHook(fmt.Sprintf("start-%s", controllerName),
-		func(hookContext genericapiserver.PostStartHookContext) error {
-			fs.WalkDir(crdManifestsFS, "manifests", func(file string, d fs.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
-
-				if !d.IsDir() {
-					b, err := crdManifestsFS.ReadFile(file)
-					if err != nil {
-						return err
-					}
-					obj := &unstructured.Unstructured{}
-					err = yaml.Unmarshal(b, &obj)
-					if err != nil {
-						return err
-					}
-					_, err = s.client.
-						Resource(apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions")).
-						Create(context.TODO(), obj, metav1.CreateOptions{})
-					if err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-			return nil
-		})
-	return nil
-}
-
-func (s *GlobalHubApiServer) GetClient() dynamic.Interface {
-	return s.client
-}
-
-type globalHubController struct {
+type GenericController struct {
 	name           string
 	ctx            context.Context
 	gvr            schema.GroupVersionResource
@@ -75,13 +27,13 @@ type globalHubController struct {
 	reconcile      func(ctx context.Context, obj interface{}) error
 }
 
-func (s *GlobalHubApiServer) RegisterController(controller controllers.Controller) {
-	c := &globalHubController{
+func NewGenericController(ctx context.Context, client dynamic.Interface, informerFactory dynamicinformer.DynamicSharedInformerFactory, controller Controller) *GenericController {
+	c := &GenericController{
+		ctx:            ctx,
 		name:           controller.GetName(),
-		client:         s.client,
-		ctx:            s.ctx,
+		client:         client,
 		gvr:            controller.GetGVR(),
-		informer:       s.informerFactory.ForResource(controller.GetGVR()).Informer(),
+		informer:       informerFactory.ForResource(controller.GetGVR()).Informer(),
 		queue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), controller.GetName()),
 		createInstance: controller.CreateInstanceFunc(),
 		reconcile:      controller.ReconcileFunc(),
@@ -100,16 +52,11 @@ func (s *GlobalHubApiServer) RegisterController(controller controllers.Controlle
 			},
 		},
 	)
-
-	s.AddPostStartHook(fmt.Sprintf("start-%s", controller.GetName()),
-		func(hookContext genericapiserver.PostStartHookContext) error {
-			go c.run(s.ctx, 1)
-			return nil
-		})
+	return c
 }
 
 // enqueue enqueues a resource.
-func (c *globalHubController) enqueue(obj interface{}) {
+func (c *GenericController) enqueue(obj interface{}) {
 	key, err := cache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
 		utilruntime.HandleError(err)
@@ -119,7 +66,7 @@ func (c *globalHubController) enqueue(obj interface{}) {
 }
 
 // Start starts N worker processes processing work items.
-func (c *globalHubController) run(ctx context.Context, numThreads int) {
+func (c *GenericController) Run(ctx context.Context, numThreads int) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
@@ -139,12 +86,12 @@ func (c *globalHubController) run(ctx context.Context, numThreads int) {
 	<-ctx.Done()
 }
 
-func (c *globalHubController) startWorker(ctx context.Context) {
+func (c *GenericController) startWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
-func (c *globalHubController) processNextWorkItem(ctx context.Context) bool {
+func (c *GenericController) processNextWorkItem(ctx context.Context) bool {
 	// Wait until there is a new item in the working queue
 	k, quit := c.queue.Get()
 	if quit {
@@ -165,7 +112,7 @@ func (c *globalHubController) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
-func (c *globalHubController) process(ctx context.Context, key string) error {
+func (c *GenericController) process(ctx context.Context, key string) error {
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		klog.Errorf("invalid key: %q: %w", key, err)
