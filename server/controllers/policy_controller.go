@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -14,10 +15,23 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	policyv1 "github.com/clyang82/multicluster-global-hub-lite/apis/policy/v1"
+	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
 const GlobalHubPolicyNamespaceLabel = "global-hub.open-cluster-management.io/original-namespace"
+
+// ComplianceSummary ComplianceSummary `json:"complianceSummary,omitempty"` // used by global policy
+type ComplianceSummary struct {
+	Compliant    uint32           `json:"compliant,omitempty"`
+	NonCompliant uint32           `json:"noncompliant,omitempty"`
+	Summaries    []ClusterSummary `json:"summaries,omitempty"`
+}
+
+type ClusterSummary struct {
+	Name         string `json:"name,omitempty"`
+	Compliant    uint32 `json:"compliant,omitempty"`
+	NonCompliant uint32 `json:"noncompliant,omitempty"`
+}
 
 type policyController struct {
 	client    dynamic.Interface
@@ -94,62 +108,80 @@ func (c *policyController) ReconcileFunc() func(ctx context.Context, obj interfa
 	}
 }
 
-func (c *policyController) updateGlobalHubPolicy(ctx context.Context, policy *policyv1.Policy, originalNamespace string) error {
-	unStructObj, err := c.client.Resource(c.policyGVR).Namespace(originalNamespace).Get(ctx, policy.GetName(), metav1.GetOptions{})
+func (c *policyController) updateGlobalHubPolicy(ctx context.Context, syncerPolicy *policyv1.Policy, originalNamespace string) error {
+	globalObj, err := c.client.Resource(c.policyGVR).Namespace(originalNamespace).Get(ctx, syncerPolicy.GetName(), metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		klog.Errorf("the policy(%s) is not existed in global hub namespace(%s)", policy.GetName(), originalNamespace)
+		klog.Errorf("the policy(%s) is not existed in global hub namespace(%s)", syncerPolicy.GetName(), originalNamespace)
 		return err
 	}
 	if err != nil {
 		return err
 	}
-	globalHubPolicy := &policyv1.Policy{}
-	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unStructObj.UnstructuredContent(), globalHubPolicy); err != nil {
-		return err
-	}
+	// globalHubPolicy := &policyv1.Policy{}
+	// if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unStructObj.UnstructuredContent(), globalHubPolicy); err != nil {
+	// 	return err
+	// }
 
-	newComplianceSummary := policyv1.ClusterSummary{
-		Name:         policy.GetNamespace(),
+	newClusterSummary := ClusterSummary{
+		Name:         syncerPolicy.GetNamespace(), // syncer identity
 		Compliant:    0,
 		NonCompliant: 0,
 	}
-	for _, cluster := range policy.Status.Status {
+
+	for _, cluster := range syncerPolicy.Status.Status {
 		switch cluster.ComplianceState {
 		case policyv1.Compliant:
-			newComplianceSummary.Compliant++
+			newClusterSummary.Compliant++
 		case policyv1.NonCompliant:
-			newComplianceSummary.NonCompliant++
+			newClusterSummary.NonCompliant++
 		default:
 			klog.Warningf("cluster %s with unknown status %s", cluster.ClusterName, cluster.ComplianceState)
 		}
 	}
 
-	exist := false
-	for index, complianceSummary := range globalHubPolicy.Status.ComplianceSummary.Summaries {
-		if newComplianceSummary.Name == complianceSummary.Name {
-			exist = true
-			globalHubPolicy.Status.ComplianceSummary.Compliant += (newComplianceSummary.Compliant - complianceSummary.Compliant)
-			globalHubPolicy.Status.ComplianceSummary.NonCompliant += (newComplianceSummary.NonCompliant - complianceSummary.NonCompliant)
-			globalHubPolicy.Status.ComplianceSummary.Summaries[index].Compliant = newComplianceSummary.Compliant
-			globalHubPolicy.Status.ComplianceSummary.Summaries[index].NonCompliant = newComplianceSummary.NonCompliant
-		}
-	}
-	if !exist {
-		globalHubPolicy.Status.ComplianceSummary.Compliant += newComplianceSummary.Compliant
-		globalHubPolicy.Status.ComplianceSummary.NonCompliant += newComplianceSummary.NonCompliant
-		globalHubPolicy.Status.ComplianceSummary.Summaries = append(policy.Status.ComplianceSummary.Summaries, newComplianceSummary)
-	}
-
-	unStructMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(globalHubPolicy)
+	policyStatusMap := globalObj.Object["status"].(map[string]interface{})
+	policyComplianceSummaryJson, err := json.Marshal(policyStatusMap["complianceSummary"])
 	if err != nil {
 		return err
 	}
-
-	if _, err := c.client.Resource(c.policyGVR).Namespace(globalHubPolicy.Namespace).UpdateStatus(context.TODO(),
-		&unstructured.Unstructured{Object: unStructMap}, metav1.UpdateOptions{}); err != nil {
+	policyComplianceSummary := ComplianceSummary{}
+	if err := json.Unmarshal(policyComplianceSummaryJson, &policyComplianceSummary); err != nil {
 		return err
 	}
 
-	klog.Infof("updated global policy: %s/%s by syncer policy: %s/%s", globalHubPolicy.GetNamespace(), globalHubPolicy.GetName(), policy.GetNamespace(), policy.GetName())
+	exist := false
+	for index, complianceSummary := range policyComplianceSummary.Summaries {
+		if newClusterSummary.Name == complianceSummary.Name {
+			exist = true
+			policyComplianceSummary.Compliant += (newClusterSummary.Compliant - complianceSummary.Compliant)
+			policyComplianceSummary.NonCompliant += (newClusterSummary.NonCompliant - complianceSummary.NonCompliant)
+			policyComplianceSummary.Summaries[index].Compliant = newClusterSummary.Compliant
+			policyComplianceSummary.Summaries[index].NonCompliant = newClusterSummary.NonCompliant
+		}
+	}
+	if !exist {
+		policyComplianceSummary.Compliant += newClusterSummary.Compliant
+		policyComplianceSummary.NonCompliant += newClusterSummary.NonCompliant
+		policyComplianceSummary.Summaries = append(policyComplianceSummary.Summaries, newClusterSummary)
+	}
+
+	// convert struct to map
+	policyComplianceSummaryStr, err := json.Marshal(policyComplianceSummary)
+	if err != nil {
+		return err
+	}
+	policyComplianceSummaryMap := make(map[string]interface{})
+	if err := json.Unmarshal(policyComplianceSummaryStr, &policyComplianceSummaryMap); err != nil {
+		return err
+	}
+
+	policyStatusMap["complianceSummary"] = policyComplianceSummaryMap
+
+	if _, err := c.client.Resource(c.policyGVR).Namespace(globalObj.GetNamespace()).UpdateStatus(context.TODO(),
+		globalObj, metav1.UpdateOptions{}); err != nil {
+		return err
+	}
+
+	klog.Infof("updated global policy: %s/%s by syncer policy: %s/%s", globalObj.GetNamespace(), globalObj.GetName(), syncerPolicy.GetNamespace(), syncerPolicy.GetName())
 	return nil
 }

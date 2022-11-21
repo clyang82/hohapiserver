@@ -10,7 +10,7 @@ rules:
   resources: ["policies", "placementbindings", "policies/status"]
   verbs: ["create", "get", "list", "watch", "patch", "update", "delete"]
 - apiGroups: ["cluster.open-cluster-management.io"]
-  resources: ["managedclusters", "managedclusters/status"]
+  resources: ["managedclusters", "managedclusters/status", "hubcontrolplanes"]
   verbs: ["create", "get", "list", "watch", "patch", "update"]
 - apiGroups: ["apps.open-cluster-management.io"]
   resources: ["placementrules"]

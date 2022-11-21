@@ -17,8 +17,8 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	policyv1 "github.com/clyang82/multicluster-global-hub-lite/apis/policy/v1"
 	"github.com/clyang82/multicluster-global-hub-lite/server/controllers"
+	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
 var (
@@ -113,7 +113,7 @@ func TestPolicySummary(t *testing.T) {
 	}
 
 	labeledPolicy := &policyv1.Policy{}
-	if err := getPolicyWithSummary(policy1.Namespace, policy1.Name, labeledPolicy); err != nil {
+	if err := getPolicy(policy1.Namespace, policy1.Name, labeledPolicy); err != nil {
 		t.Error(err)
 	}
 	if labeledPolicy.GetLabels()[controllers.GlobalHubPolicyNamespaceLabel] != policy1.GetNamespace() {
@@ -147,17 +147,25 @@ func TestPolicySummary(t *testing.T) {
 	}
 
 	// 4. verify the reconcile policy
-	summariedPolicy := &policyv1.Policy{}
-	if err := getPolicyWithSummary(policy1.Namespace, policy1.Name, summariedPolicy); err != nil {
-		t.Fatal(fmt.Errorf("error to get the reconciled policy: %w", err))
+	unObj, err = client.Resource(policyGVR).Namespace(policy1.Namespace).Get(context.TODO(), policy1.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(fmt.Errorf("error to get policy: %w", err))
 	}
-	t.Log(prettyPrint(summariedPolicy))
-	// if newPolicy.Status.ComplianceSummary.Compliant != 1 || newPolicy.Status.ComplianceSummary.NonCompliant != 1 {
-	// 	t.Fatal(fmt.Errorf("compliance summary is incorrect: %s", prettyPrint(newPolicy)))
-	// }
+	policyStatusMap := unObj.Object["status"].(map[string]interface{})
+	policyComplianceSummaryJson, err := json.Marshal(policyStatusMap["complianceSummary"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyComplianceSummary := controllers.ComplianceSummary{}
+	if err := json.Unmarshal(policyComplianceSummaryJson, &policyComplianceSummary); err != nil {
+		t.Fatal(err)
+	}
+	if policyComplianceSummary.Compliant != 1 || policyComplianceSummary.NonCompliant != 1 {
+		t.Fatal(fmt.Errorf("compliance summary is incorrect: %s", prettyPrint(unObj)))
+	}
 }
 
-func getPolicyWithSummary(namespace, name string, policy *policyv1.Policy) error {
+func getPolicy(namespace, name string, policy *policyv1.Policy) error {
 	unObj, err := client.Resource(policyGVR).Namespace(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		return err
