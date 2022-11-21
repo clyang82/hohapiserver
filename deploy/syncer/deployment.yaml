@@ -20,10 +20,12 @@ spec:
         - "/syncer"
         - "--from-kubeconfig=/multicluster-global-hub-config/kubeconfig"
         - "--pod-namespace=$(POD_NAMESPACE)"
+        - "--to-kubeconfig=/multicluster-global-hub-syncer-config/kubeconfig"
         env:
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
+              apiVersion: v1
               fieldPath: metadata.namespace
         name: multicluster-global-hub-syncer
         image: quay.io/clyang82/multicluster-global-hub-syncer:latest
@@ -38,8 +40,14 @@ spec:
         volumeMounts:
         - mountPath: /multicluster-global-hub-config
           name: multicluster-global-hub-kubeconfig
+        - mountPath: /multicluster-global-hub-syncer-config
+          name: multicluster-global-hub-syncer-kubeconfig
       volumes:
       - name: multicluster-global-hub-kubeconfig
         secret:
           defaultMode: 420
           secretName: multicluster-global-hub-kubeconfig
+      - name: multicluster-global-hub-syncer-kubeconfig
+        secret:
+          defaultMode: 420
+          secretName: controlplane-kubeconfig

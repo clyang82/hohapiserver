@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	synceroptions "github.com/clyang82/multicluster-global-hub-lite/cmd/syncer/options"
@@ -51,7 +52,15 @@ func Run(options *synceroptions.Options, ctx context.Context) error {
 		return err
 	}
 
-	toConfig, err := clientcmd.BuildConfigFromFlags("", "")
+	var toConfig *rest.Config
+	if len(options.ToKubeconfig) > 0 {
+		toConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			&clientcmd.ClientConfigLoadingRules{ExplicitPath: options.ToKubeconfig}, nil).ClientConfig()
+	} else {
+		// fall back to in-cluster kubeconfig if the passed kubeconfig is empty
+		toConfig, err = clientcmd.BuildConfigFromFlags("", "")
+	}
+
 	if err != nil {
 		return err
 	}

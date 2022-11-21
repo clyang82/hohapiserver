@@ -74,6 +74,7 @@ type Controller struct {
 	queue     workqueue.RateLimitingInterface
 
 	fromInformers dynamicinformer.DynamicSharedInformerFactory
+	fromConfig    *rest.Config
 	toClient      dynamic.Interface
 
 	upsertFn  UpsertFunc
@@ -84,7 +85,7 @@ type Controller struct {
 }
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
-func New(fromClient, toClient dynamic.Interface, direction SyncDirection, syncerNamespace string) (*Controller, error) {
+func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direction SyncDirection, syncerNamespace string) (*Controller, error) {
 	controllerName := string(direction) + "--regional-hub-->global-hub"
 	if direction == SyncDown {
 		controllerName = string(direction) + "--global-hub-->regional-hub"
@@ -96,6 +97,7 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection, syncer
 		namespace: syncerNamespace,
 		queue:     queue,
 		toClient:  toClient,
+    fromConfig: fromConfig,
 		direction: direction,
 	}
 
@@ -112,6 +114,8 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection, syncer
 		c.gvrs = []string{
 			"policies.v1.policy.open-cluster-management.io",
 			"managedclusters.v1.cluster.open-cluster-management.io",
+			"clustermanagementaddons.v1alpha1.addon.open-cluster-management.io",
+			"customresourcedefinitions.v1.apiextensions.k8s.io",
 		}
 	}
 
@@ -128,25 +132,57 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection, syncer
 
 		fromInformers.ForResource(*gvr).Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				unObj := obj.(*unstructured.Unstructured)
-				if len(unObj.GetNamespace()) == 0 {
-					c.AddToQueue(*gvr, unObj)
-					return
-				}
-				originalNamespace, ok := unObj.GetLabels()[GlobalHubPolicyNamespaceLabel]
-				// only process the global hub resource
-				if ok && originalNamespace == unObj.GetNamespace() {
+				shouldEnqueue := true
+        unstrob, ok := obj.(*unstructured.Unstructured)
+        if !ok {
+          shouldEnqueue = false
+        }
+				if c.direction == SyncUp {
+					// check the managedcluster CRD to make sure this is a hub controlplane
+					if gvr.Resource == "customresourcedefinitions" {
+						
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+							shouldEnqueue = false
+						}
+					}
+        } else {
+          // only process the resources in the global hub namesapces
+          if len(unstrob.GetNamespace()) > 0 {
+            originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
+            if !ok || originalNamespace != unstrob.GetNamespace() {
+              shouldEnqueue = false
+            }
+          }
+        }
+
+				if shouldEnqueue {
 					c.AddToQueue(*gvr, obj)
 				}
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				unObj := newObj.(*unstructured.Unstructured)
-				if len(unObj.GetNamespace()) == 0 {
-					c.AddToQueue(*gvr, unObj)
-					return
-				}
-				originalNamespace, ok := unObj.GetLabels()[GlobalHubPolicyNamespaceLabel]
-				if ok && originalNamespace == unObj.GetNamespace() {
+				shouldEnqueue := true
+        unstrob, ok := newObj.(*unstructured.Unstructured)
+        if !ok {
+          shouldEnqueue = false
+        }
+				if c.direction == SyncUp {
+					// check the managedcluster CRD to make sure this is a hub controlplane
+					if gvr.Resource == "customresourcedefinitions" {
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+							shouldEnqueue = false
+						}
+					}
+        } else {
+          // only process the resources in the global hub namesapces
+          if len(unstrob.GetNamespace()) > 0 {
+            originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
+            if !ok || originalNamespace != unstrob.GetNamespace() {
+              shouldEnqueue = false
+            }
+          }
+        }
+
+				if shouldEnqueue {
 					if c.direction == SyncDown {
 						if !deepEqualApartFromStatus(oldObj, newObj) {
 							c.AddToQueue(*gvr, newObj)
@@ -159,13 +195,32 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection, syncer
 				}
 			},
 			DeleteFunc: func(obj interface{}) {
-				unObj := obj.(*unstructured.Unstructured)
-				if len(unObj.GetNamespace()) == 0 {
-					c.AddToQueue(*gvr, unObj)
-					return
-				}
-				originalNamespace, ok := unObj.GetLabels()[GlobalHubPolicyNamespaceLabel]
-				if ok && originalNamespace == unObj.GetNamespace() {
+        shouldEnqueue := true
+        unstrob, ok := obj.(*unstructured.Unstructured)
+        if !ok {
+          shouldEnqueue = false
+        }
+				if c.direction == SyncUp {
+					// check the managedcluster CRD to make sure this is a hub controlplane
+					if gvr.Resource == "customresourcedefinitions" {
+						unstrob, ok := obj.(*unstructured.Unstructured)
+						if !ok {
+							shouldEnqueue = false
+						}
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+							shouldEnqueue = false
+						}
+					}
+        } else {
+          // only process the resources in the global hub namesapces
+          if len(unstrob.GetNamespace()) > 0 {
+            originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
+            if !ok || originalNamespace != unstrob.GetNamespace() {
+              shouldEnqueue = false
+            }
+          }
+        }
+				if shouldEnqueue {
 					c.AddToQueue(*gvr, obj)
 				}
 			},
