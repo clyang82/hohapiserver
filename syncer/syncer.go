@@ -129,6 +129,10 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection, syncer
 		fromInformers.ForResource(*gvr).Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				unObj := obj.(*unstructured.Unstructured)
+				if len(unObj.GetNamespace()) == 0 {
+					c.AddToQueue(*gvr, unObj)
+					return
+				}
 				originalNamespace, ok := unObj.GetLabels()[GlobalHubPolicyNamespaceLabel]
 				// only process the global hub resource
 				if ok && originalNamespace == unObj.GetNamespace() {
@@ -137,6 +141,10 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection, syncer
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				unObj := newObj.(*unstructured.Unstructured)
+				if len(unObj.GetNamespace()) == 0 {
+					c.AddToQueue(*gvr, unObj)
+					return
+				}
 				originalNamespace, ok := unObj.GetLabels()[GlobalHubPolicyNamespaceLabel]
 				if ok && originalNamespace == unObj.GetNamespace() {
 					if c.direction == SyncDown {
@@ -152,6 +160,10 @@ func New(fromClient, toClient dynamic.Interface, direction SyncDirection, syncer
 			},
 			DeleteFunc: func(obj interface{}) {
 				unObj := obj.(*unstructured.Unstructured)
+				if len(unObj.GetNamespace()) == 0 {
+					c.AddToQueue(*gvr, unObj)
+					return
+				}
 				originalNamespace, ok := unObj.GetLabels()[GlobalHubPolicyNamespaceLabel]
 				if ok && originalNamespace == unObj.GetNamespace() {
 					c.AddToQueue(*gvr, obj)

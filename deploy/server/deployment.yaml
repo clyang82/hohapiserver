@@ -23,7 +23,7 @@ spec:
         - "--tls-private-key-file=/var/run/apiservice/tls.key"
         env:
         name: multicluster-global-hub-apiserver
-        image: quay.io/myan/multicluster-global-hub-apiserver:latest
+        image: quay.io/clyang82/multicluster-global-hub-apiserver:latest
         imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false

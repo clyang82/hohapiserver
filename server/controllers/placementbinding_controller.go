@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
-	placementrulev1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -21,7 +20,7 @@ type placementBindingController struct {
 func NewPlacementBindingController(dynamicClient dynamic.Interface) Controller {
 	return &placementBindingController{
 		client: dynamicClient,
-		gvr:    placementrulev1.SchemeGroupVersion.WithResource("placementbindings"),
+		gvr:    policyv1.SchemeGroupVersion.WithResource("placementbindings"),
 	}
 }
 
@@ -49,7 +48,11 @@ func (c *placementBindingController) ReconcileFunc() func(ctx context.Context, o
 		labels := unObj.GetLabels()
 		_, ok = labels[GlobalHubPolicyNamespaceLabel]
 		if !ok {
+			if labels == nil {
+				labels = map[string]string{}
+			}
 			labels[GlobalHubPolicyNamespaceLabel] = unObj.GetNamespace()
+			unObj.SetLabels(labels)
 			if _, err := c.client.Resource(c.gvr).Namespace(unObj.GetNamespace()).Update(ctx, unObj, metav1.UpdateOptions{}); err != nil {
 				return err
 			}

@@ -51,21 +51,28 @@ func (c *policyController) ReconcileFunc() func(ctx context.Context, obj interfa
 		if !ok {
 			return fmt.Errorf("cann't convert obj(%+v) to *unstructured.Unstructured", obj)
 		}
-
 		// check the original namespace
 		labels := unObj.GetLabels()
 		originalNamespace, ok := labels[GlobalHubPolicyNamespaceLabel]
+
 		if !ok {
+			if labels == nil {
+				labels = map[string]string{}
+			}
 			labels[GlobalHubPolicyNamespaceLabel] = unObj.GetNamespace()
+			unObj.SetLabels(labels)
 			if _, err := c.client.Resource(c.policyGVR).Namespace(unObj.GetNamespace()).Update(ctx, unObj, metav1.UpdateOptions{}); err != nil {
 				return err
 			}
+			klog.Infof("add global label to resource(%s/%s) \n", unObj.GetNamespace(), unObj.GetName())
 			return nil
 		}
-		if originalNamespace == unObj.GetNamespace() {
-			klog.Infof("the policy(%s/%s) is from global hub namespace, skip reconcile status", unObj.GetNamespace(), unObj.GetName())
-			return nil
-		}
+
+		// TODO: remove the following comments if the
+		// if originalNamespace == unObj.GetNamespace() {
+		// 	klog.Infof("the policy(%s/%s) is from global hub namespace, skip reconcile status", unObj.GetNamespace(), unObj.GetName())
+		// 	return nil
+		// }
 
 		// watch the syncer's policy and update the global hub's policy
 		syncerPolicy := &policyv1.Policy{}

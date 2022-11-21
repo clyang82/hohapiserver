@@ -67,7 +67,7 @@ func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.Grou
 
 	existing, err := c.toClient.Resource(gvr).Namespace(c.namespace).Get(ctx, upstreamObj.GetName(), metav1.GetOptions{})
 	if err != nil {
-		if (gvr.Resource == "managedclusters" || gvr.Resource == "policies") && errors.IsNotFound(err) {
+		if (gvr.Resource == "managedclusters") && errors.IsNotFound(err) {
 			return c.applyToUpstream(ctx, gvr, c.namespace, downstreamObj)
 		}
 		klog.Errorf("Getting resource %s/%s: %v", upstreamNamespace, upstreamObj.GetName(), err)
@@ -106,7 +106,7 @@ func (c *Controller) applyToUpstream(ctx context.Context, gvr schema.GroupVersio
 		return err
 	}
 
-	if _, err := c.toClient.Resource(gvr).Namespace(c.namespace).Patch(ctx, upstreamObj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{FieldManager: syncerApplyManager, Force: pointer.Bool(true)}); err != nil {
+	if _, err := c.toClient.Resource(gvr).Patch(ctx, upstreamObj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{FieldManager: syncerApplyManager, Force: pointer.Bool(true)}); err != nil {
 		klog.Infof("Error upserting %s %s from downstream %s: %v", gvr.Resource, upstreamObj.GetName(), downstreamObj.GetName(), err)
 		return err
 	}

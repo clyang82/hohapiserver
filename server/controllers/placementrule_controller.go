@@ -49,7 +49,11 @@ func (c *placementRuleController) ReconcileFunc() func(ctx context.Context, obj 
 		labels := unObj.GetLabels()
 		_, ok = labels[GlobalHubPolicyNamespaceLabel]
 		if !ok {
+			if labels == nil {
+				labels = map[string]string{}
+			}
 			labels[GlobalHubPolicyNamespaceLabel] = unObj.GetNamespace()
+			unObj.SetLabels(labels)
 			if _, err := c.client.Resource(c.gvr).Namespace(unObj.GetNamespace()).Update(ctx, unObj, metav1.UpdateOptions{}); err != nil {
 				return err
 			}
