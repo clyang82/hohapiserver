@@ -2,15 +2,10 @@ package server
 
 import (
 	"context"
-	"embed"
 	"fmt"
-	"io/fs"
 	"time"
 
-	"gopkg.in/yaml.v2"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
@@ -19,9 +14,6 @@ import (
 	"github.com/clyang82/multicluster-global-hub-lite/server/controllers"
 	"github.com/clyang82/multicluster-global-hub-lite/server/etcd"
 )
-
-//go:embed manifests
-var crdManifestsFS embed.FS
 
 type GlobalHubApiServer struct {
 	postStartHooks   []postStartHookEntry
@@ -93,9 +85,7 @@ func (s *GlobalHubApiServer) RunGlobalHubApiServer(ctx context.Context) error {
 			o.LabelSelector = fmt.Sprintf("!%s", "multicluster-global-hub.open-cluster-management.io/local-resource")
 		})
 
-	if err = s.installCRD(ctx); err != nil {
-		return err
-	}
+	addCRDs(s)
 
 	// register controller to the api server
 	controllers.AddControllers(s)
@@ -151,37 +141,4 @@ func (s *GlobalHubApiServer) addPreShutdownHook(name string, hook genericapiserv
 		name: name,
 		hook: hook,
 	})
-}
-
-func (s *GlobalHubApiServer) installCRD(ctx context.Context) error {
-	controllerName := "global-hub-crd-controller"
-	s.addPostStartHook(fmt.Sprintf("start-%s", controllerName),
-		func(hookContext genericapiserver.PostStartHookContext) error {
-			fs.WalkDir(crdManifestsFS, "manifests", func(file string, d fs.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
-
-				if !d.IsDir() {
-					b, err := crdManifestsFS.ReadFile(file)
-					if err != nil {
-						return err
-					}
-					obj := &unstructured.Unstructured{}
-					err = yaml.Unmarshal(b, &obj)
-					if err != nil {
-						return err
-					}
-					_, err = s.client.
-						Resource(apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions")).
-						Create(context.TODO(), obj, metav1.CreateOptions{})
-					if err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-			return nil
-		})
-	return nil
 }
