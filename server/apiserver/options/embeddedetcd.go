@@ -40,7 +40,7 @@ func NewEmbeddedEtcd() *EmbeddedEtcd {
 }
 
 func (e *EmbeddedEtcd) AddFlags(fs *pflag.FlagSet) {
-	fs.BoolVar(&e.Enabled, "enable-embedded-etcd", false, "will use embedded etcd, if set to true")
+	fs.BoolVar(&e.Enabled, "enable-embedded-etcd", true, "will use embedded etcd, if set to true")
 	fs.StringVar(&e.Directory, "embedded-etcd-directory", e.Directory, "Directory for embedded etcd")
 	fs.StringVar(&e.PeerPort, "embedded-etcd-peer-port", e.PeerPort, "Port for embedded etcd peer")
 	fs.StringVar(&e.ClientPort, "embedded-etcd-client-port", e.ClientPort, "Port for embedded etcd client")

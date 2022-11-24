@@ -50,14 +50,11 @@ const (
 	ExternalLoops
 )
 
-func RunKubeControllers(cfg *restclient.Config, clientCert, clientKey string) error {
+func RunKubeControllers(cfg *restclient.Config) error {
 	s, err := options.NewKubeControllerManagerOptions()
 	if err != nil {
 		klog.Fatalf("unable to initialize kube options: %v", err)
 	}
-
-	s.CSRSigningController.ClusterSigningCertFile = clientCert
-	s.CSRSigningController.ClusterSigningKeyFile = clientKey
 
 	config, err := s.Config(cfg)
 	if err != nil {
@@ -180,12 +177,6 @@ func NewControllerInitializers() map[string]InitFunc {
 	controllers := map[string]InitFunc{}
 	controllers["namespace"] = startNamespaceController
 	controllers["garbagecollector"] = startGarbageCollectorController
-	controllers["csrsigning"] = startCSRSigningController
-	controllers["csrapproving"] = startCSRApprovingController
-	controllers["csrcleaner"] = startCSRCleanerController
-	controllers["bootstrapsigner"] = startBootstrapSignerController
-	controllers["tokencleaner"] = startTokenCleanerController
-	controllers["root-ca-cert-publisher"] = startRootCACertPublisher
 
 	return controllers
 }

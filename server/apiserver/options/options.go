@@ -17,7 +17,6 @@ limitations under the License.
 package options
 
 import (
-	"errors"
 	"net"
 	"time"
 
@@ -53,9 +52,6 @@ type ServerRunOptions struct {
 	SecureServing           *genericoptions.SecureServingOptionsWithLoopback
 	Audit                   *genericoptions.AuditOptions
 	Features                *genericoptions.FeatureOptions
-	Admission               *AdmissionOptions
-	Authentication          *BuiltInAuthenticationOptions
-	Authorization           *BuiltInAuthorizationOptions
 	APIEnablement           *genericoptions.APIEnablementOptions
 	EgressSelector          *genericoptions.EgressSelectorOptions
 	Metrics                 *metrics.Options
@@ -101,9 +97,6 @@ func NewServerRunOptions() *ServerRunOptions {
 		SecureServing:           NewSecureServingOptions(),
 		Audit:                   genericoptions.NewAuditOptions(),
 		Features:                genericoptions.NewFeatureOptions(),
-		Admission:               NewAdmissionOptions(),
-		Authentication:          NewBuiltInAuthenticationOptions().WithAll(),
-		Authorization:           NewBuiltInAuthorizationOptions(),
 		APIEnablement:           genericoptions.NewAPIEnablementOptions(),
 		EgressSelector:          genericoptions.NewEgressSelectorOptions(),
 		Metrics:                 metrics.NewOptions(),
@@ -142,49 +135,20 @@ func (s *ServerRunOptions) Validate(args []string) error {
 	errs := []error{}
 	errs = append(errs, s.Etcd.Validate()...)
 	errs = append(errs, s.SecureServing.Validate()...)
-	errs = append(errs, s.Authentication.Validate()...)
-	errs = append(errs, s.Authorization.Validate()...)
 	errs = append(errs, s.Audit.Validate()...)
-	errs = append(errs, s.Admission.Validate()...)
 	errs = append(errs, s.APIEnablement.Validate(legacyscheme.Scheme, apiextensionsapiserver.Scheme, aggregatorscheme.Scheme)...)
-	errs = append(errs, validateTokenRequest(s)...)
 	errs = append(errs, s.Metrics.Validate()...)
 	errs = append(errs, s.EmbeddedEtcd.Validate()...)
 	return utilerrors.NewAggregate(errs)
 }
 
-func validateTokenRequest(options *ServerRunOptions) []error {
-	var errs []error
-
-	enableAttempted := options.ServiceAccountSigningKeyFile != "" ||
-		(len(options.Authentication.ServiceAccounts.Issuers) != 0 && options.Authentication.ServiceAccounts.Issuers[0] != "") ||
-		len(options.Authentication.APIAudiences) != 0
-
-	enableSucceeded := options.ServiceAccountIssuer != nil
-
-	if !enableAttempted {
-		errs = append(errs, errors.New("--service-account-signing-key-file and --service-account-issuer are required flags"))
-	}
-
-	if enableAttempted && !enableSucceeded {
-		errs = append(errs, errors.New("--service-account-signing-key-file, --service-account-issuer, and --api-audiences should be specified together"))
-	}
-
-	return errs
-}
-
 func (e *ServerRunOptions) AddFlags(fs *pflag.FlagSet) {
 	e.SecureServing.AddFlags(fs)
 	e.Etcd.AddFlags(fs)
-	e.Authentication.AddFlags(fs)
-	e.Authorization.AddFlags(fs)
-	e.Admission.AddFlags(fs)
 	e.GenericServerRunOptions.AddUniversalFlags(fs)
 	e.EmbeddedEtcd.AddFlags(fs)
 
 	fs.StringVar(&e.ClientKeyFile, "client-key-file", e.ClientKeyFile, "client cert key file")
-	fs.StringVar(&e.ServiceAccountSigningKeyFile, "service-account-signing-key-file", e.ServiceAccountSigningKeyFile, ""+
-		"Path to the file that contains the current private key of the service account token issuer. The issuer will sign issued ID tokens with this private key.")
 	fs.StringVar(&e.ServiceClusterIPRanges, "service-cluster-ip-range", e.ServiceClusterIPRanges, ""+
 		"A CIDR notation IP range from which to assign service cluster IPs. This must not "+
 		"overlap with any IP ranges assigned to nodes or pods. Max of two dual-stack CIDRs is allowed.")

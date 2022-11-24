@@ -18,7 +18,6 @@ require (
 	k8s.io/klog/v2 v2.60.1
 	k8s.io/kube-aggregator v0.24.3
 	k8s.io/kube-controller-manager v0.0.0
-	k8s.io/kube-openapi v0.0.0-20220328201542-3ee0da9b0b42
 	k8s.io/kubernetes v1.24.0
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/controller-runtime v0.11.1
@@ -139,6 +138,7 @@ require (
 	k8s.io/cloud-provider v0.24.3 // indirect
 	k8s.io/cluster-bootstrap v0.0.0 // indirect
 	k8s.io/component-helpers v0.24.3 // indirect
+	k8s.io/kube-openapi v0.0.0-20220328201542-3ee0da9b0b42 //indirect
 	k8s.io/kubelet v0.0.0 // indirect
 	k8s.io/mount-utils v0.24.3 // indirect
 	k8s.io/pod-security-admission v0.0.0 // indirect
