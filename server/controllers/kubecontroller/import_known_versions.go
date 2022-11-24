@@ -21,10 +21,6 @@ package kubecontroller
 
 import (
 	// These imports are the API groups the client will support.
-	_ "k8s.io/kubernetes/pkg/apis/authentication/install"
-	_ "k8s.io/kubernetes/pkg/apis/authorization/install"
-	_ "k8s.io/kubernetes/pkg/apis/certificates/install"
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 	_ "k8s.io/kubernetes/pkg/apis/events/install"
-	_ "k8s.io/kubernetes/pkg/apis/rbac/install"
 )

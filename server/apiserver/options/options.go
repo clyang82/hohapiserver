@@ -152,7 +152,6 @@ func (e *ServerRunOptions) AddFlags(fs *pflag.FlagSet) {
 	e.GenericServerRunOptions.AddUniversalFlags(fs)
 	e.EmbeddedEtcd.AddFlags(fs)
 
-	fs.StringVar(&e.ClientKeyFile, "client-key-file", e.ClientKeyFile, "client cert key file")
 	fs.StringVar(&e.ServiceClusterIPRanges, "service-cluster-ip-range", e.ServiceClusterIPRanges, ""+
 		"A CIDR notation IP range from which to assign service cluster IPs. This must not "+
 		"overlap with any IP ranges assigned to nodes or pods. Max of two dual-stack CIDRs is allowed.")
