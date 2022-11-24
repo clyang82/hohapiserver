@@ -269,6 +269,17 @@ func buildGenericConfig(
 	}
 	versionedInformers = clientgoinformers.NewSharedInformerFactory(clientgoExternalClient, 10*time.Minute)
 
+	err = s.Admission.ApplyTo(
+		genericConfig,
+		versionedInformers,
+		kubeClientConfig,
+		utilfeature.DefaultFeatureGate,
+		pluginInitializers...)
+	if err != nil {
+		lastErr = fmt.Errorf("failed to initialize admission: %v", err)
+		return
+	}
+
 	return
 }
 
