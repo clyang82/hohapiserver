@@ -52,6 +52,7 @@ type ServerRunOptions struct {
 	SecureServing           *genericoptions.SecureServingOptionsWithLoopback
 	Audit                   *genericoptions.AuditOptions
 	Features                *genericoptions.FeatureOptions
+	Admission               *AdmissionOptions
 	APIEnablement           *genericoptions.APIEnablementOptions
 	EgressSelector          *genericoptions.EgressSelectorOptions
 	Metrics                 *metrics.Options
@@ -97,6 +98,7 @@ func NewServerRunOptions() *ServerRunOptions {
 		SecureServing:           NewSecureServingOptions(),
 		Audit:                   genericoptions.NewAuditOptions(),
 		Features:                genericoptions.NewFeatureOptions(),
+		Admission:               NewAdmissionOptions(),
 		APIEnablement:           genericoptions.NewAPIEnablementOptions(),
 		EgressSelector:          genericoptions.NewEgressSelectorOptions(),
 		Metrics:                 metrics.NewOptions(),
@@ -136,6 +138,7 @@ func (s *ServerRunOptions) Validate(args []string) error {
 	errs = append(errs, s.Etcd.Validate()...)
 	errs = append(errs, s.SecureServing.Validate()...)
 	errs = append(errs, s.Audit.Validate()...)
+	errs = append(errs, s.Admission.Validate()...)
 	errs = append(errs, s.APIEnablement.Validate(legacyscheme.Scheme, apiextensionsapiserver.Scheme, aggregatorscheme.Scheme)...)
 	errs = append(errs, s.Metrics.Validate()...)
 	errs = append(errs, s.EmbeddedEtcd.Validate()...)
@@ -145,6 +148,7 @@ func (s *ServerRunOptions) Validate(args []string) error {
 func (e *ServerRunOptions) AddFlags(fs *pflag.FlagSet) {
 	e.SecureServing.AddFlags(fs)
 	e.Etcd.AddFlags(fs)
+	e.Admission.AddFlags(fs)
 	e.GenericServerRunOptions.AddUniversalFlags(fs)
 	e.EmbeddedEtcd.AddFlags(fs)
 

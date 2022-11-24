@@ -27,7 +27,6 @@ import (
 type KubeControllerManagerOptions struct {
 	Generic *cmoptions.GenericControllerManagerConfigurationOptions
 
-	CSRSigningController       *CSRSigningControllerOptions
 	GarbageCollectorController *GarbageCollectorControllerOptions
 	NamespaceController        *NamespaceControllerOptions
 
@@ -47,9 +46,6 @@ func NewKubeControllerManagerOptions() (*KubeControllerManagerOptions, error) {
 	s := KubeControllerManagerOptions{
 		Generic: cmoptions.NewGenericControllerManagerConfigurationOptions(&componentConfig.Generic),
 
-		CSRSigningController: &CSRSigningControllerOptions{
-			&componentConfig.CSRSigningController,
-		},
 		GarbageCollectorController: &GarbageCollectorControllerOptions{
 			&componentConfig.GarbageCollectorController,
 		},
@@ -86,7 +82,6 @@ func NewDefaultComponentConfig() (kubectrlmgrconfig.KubeControllerManagerConfigu
 func (s *KubeControllerManagerOptions) Flags() cliflag.NamedFlagSets {
 	fss := cliflag.NamedFlagSets{}
 
-	s.CSRSigningController.AddFlags(fss.FlagSet("csrsigning controller"))
 	s.GarbageCollectorController.AddFlags(fss.FlagSet("garbagecollector controller"))
 	s.NamespaceController.AddFlags(fss.FlagSet("namespace controller"))
 
@@ -99,9 +94,6 @@ func (s *KubeControllerManagerOptions) ApplyTo(c *kubecontrollerconfig.Config) e
 		return err
 	}
 
-	if err := s.CSRSigningController.ApplyTo(&c.ComponentConfig.CSRSigningController); err != nil {
-		return err
-	}
 	if err := s.GarbageCollectorController.ApplyTo(&c.ComponentConfig.GarbageCollectorController); err != nil {
 		return err
 	}
@@ -116,7 +108,6 @@ func (s *KubeControllerManagerOptions) ApplyTo(c *kubecontrollerconfig.Config) e
 func (s *KubeControllerManagerOptions) Validate() error {
 	var errs []error
 
-	errs = append(errs, s.CSRSigningController.Validate()...)
 	errs = append(errs, s.GarbageCollectorController.Validate()...)
 	errs = append(errs, s.NamespaceController.Validate()...)
 
