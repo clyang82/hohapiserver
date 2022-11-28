@@ -16,7 +16,7 @@ import (
 var crdManifestsFS embed.FS
 
 func InstallGlobalHubCRDs(dynamicClient dynamic.Interface) error {
-	return fs.WalkDir(crdManifestsFS, "../../manifests", func(file string, d fs.DirEntry, err error) error {
+	return fs.WalkDir(crdManifestsFS, "manifests", func(file string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
