@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
@@ -60,8 +61,8 @@ func StartSyncer(ctx context.Context, cfg *SyncerConfig, numSyncerThreads int) e
 	return nil
 }
 
-type UpsertFunc func(ctx context.Context, gvr schema.GroupVersionResource, namespace string, unstrob *unstructured.Unstructured) error
-type DeleteFunc func(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error
+type UpsertFunc func(ctx context.Context, dr dynamic.ResourceInterface, gvr schema.GroupVersionResource, namespace string, unstrob *unstructured.Unstructured) error
+type DeleteFunc func(ctx context.Context, dr dynamic.ResourceInterface, gvr schema.GroupVersionResource, namespace, name string) error
 
 type Controller struct {
 	name  string
@@ -70,6 +71,7 @@ type Controller struct {
 	fromInformers dynamicinformer.DynamicSharedInformerFactory
 	fromConfig    *rest.Config
 	toClient      dynamic.Interface
+	toRestMapper  *restmapper.DeferredDiscoveryRESTMapper
 
 	upsertFn  UpsertFunc
 	deleteFn  DeleteFunc
@@ -79,7 +81,9 @@ type Controller struct {
 }
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
-func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direction SyncDirection) (*Controller, error) {
+func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config,
+	toRestMapper *restmapper.DeferredDiscoveryRESTMapper, direction SyncDirection,
+) (*Controller, error) {
 	controllerName := string(direction) + "--regional-hub-->global-hub"
 	if direction == SyncDown {
 		controllerName = string(direction) + "--global-hub-->regional-hub"
@@ -87,11 +91,12 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "globalhub-"+controllerName)
 
 	c := Controller{
-		name:       controllerName,
-		queue:      queue,
-		toClient:   toClient,
-		fromConfig: fromConfig,
-		direction:  direction,
+		name:         controllerName,
+		queue:        queue,
+		toClient:     toClient,
+		fromConfig:   fromConfig,
+		toRestMapper: toRestMapper,
+		direction:    direction,
 	}
 
 	if direction == SyncDown {
@@ -290,6 +295,25 @@ func (c *Controller) process(ctx context.Context, h holder) error {
 		key = h.namespace + "/" + h.name
 	}
 
+	gvk, err := c.toRestMapper.KindFor(h.gvr)
+	if err != nil {
+		return err
+	}
+
+	mapping, err := c.toRestMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		return err
+	}
+
+	var dr dynamic.ResourceInterface
+	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+		// namespaced resources should specify the namespace
+		dr = c.toClient.Resource(h.gvr).Namespace(h.namespace)
+	} else {
+		// for cluster-wide resources
+		dr = c.toClient.Resource(h.gvr)
+	}
+
 	obj, exists, err := c.fromInformers.ForResource(h.gvr).Informer().GetIndexer().GetByKey(key)
 	if err != nil {
 		return err
@@ -298,7 +322,7 @@ func (c *Controller) process(ctx context.Context, h holder) error {
 	if c.direction == SyncDown && !exists {
 		klog.InfoS("Object doesn't exist:", "direction", c.direction, "namespace", h.namespace, "name", h.name)
 		if c.deleteFn != nil {
-			return c.deleteFn(ctx, h.gvr, h.namespace, h.name)
+			return c.deleteFn(ctx, dr, h.gvr, h.namespace, h.name)
 		}
 		return nil
 	}
@@ -309,7 +333,7 @@ func (c *Controller) process(ctx context.Context, h holder) error {
 	}
 
 	if c.upsertFn != nil {
-		return c.upsertFn(ctx, h.gvr, h.namespace, unstrob)
+		return c.upsertFn(ctx, dr, h.gvr, h.namespace, unstrob)
 	}
 
 	return err
