@@ -1,9 +1,12 @@
-.PHONY: fix fmt vet lint test tidy
+.PHONY: fix fmt vet lint test tidy deploy
+
+SHELL := /bin/bash
 
 GOBIN := $(shell go env GOPATH)/bin
 REGISTRY ?= quay.io/clyang82
 IMAGE_TAG ?= latest
-
+KUBECTL ?= oc
+KUSTOMIZE ?= kustomize
 
 all: fix fmt vet lint test tidy build
 
@@ -18,6 +21,15 @@ docker-push: docker
 build:
 	CGO_ENABLED=0 go build -o bin/global-hub-apiserver ./cmd/server/main.go
 	CGO_ENABLED=0 go build -o bin/syncer ./cmd/syncer/main.go
+
+deploy:
+	cp ./deploy/server/deployment.yaml ./deploy/server/deployment.yaml.tmp
+	cp ./deploy/server/kustomization.yaml ./deploy/server/kustomization.yaml.tmp
+	cd ./deploy/server && . generate_certs.sh && ${KUSTOMIZE} edit set image quay.io/clyang82/multicluster-global-hub-apiserver=${REGISTRY}/multicluster-global-hub-apiserver:${IMAGE_TAG} && cd ../..
+	sed -e 's,API_HOST,'${API_HOST}',' ./deploy/server/deployment.yaml
+	${KUSTOMIZE} build ./deploy/server | ${KUBECTL} apply -f -
+	mv ./deploy/server/deployment.yaml.tmp ./deploy/server/deployment.yaml
+	mv ./deploy/server/kustomization.yaml.tmp ./deploy/server/kustomization.yaml
 
 fix:
 	go fix ./...
