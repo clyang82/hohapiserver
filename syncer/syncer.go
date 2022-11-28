@@ -31,6 +31,9 @@ const (
 
 	// SyncUp indicates a syncer watches resources on the leaft cluster and applies the status to the global hub
 	SyncUp SyncDirection = "up"
+
+	// if the Global Hub resources with this label, it means the resources is ready to be syncDown
+	GlobalHubPolicyNamespaceLabel = "global-hub.open-cluster-management.io/original-namespace"
 )
 
 // SyncerConfig defines the syncer configuration that is guaranteed to
@@ -38,18 +41,18 @@ const (
 type SyncerConfig struct {
 	UpstreamConfig   *rest.Config
 	DownstreamConfig *rest.Config
+	SyncerName       string
 }
 
 func StartSyncer(ctx context.Context, cfg *SyncerConfig, numSyncerThreads int) error {
-
 	klog.Infof("Creating spec syncer")
-	specSyncer, err := NewSpecSyncer(cfg.UpstreamConfig, cfg.DownstreamConfig)
+	specSyncer, err := NewSpecSyncer(cfg.SyncerName, cfg.UpstreamConfig, cfg.DownstreamConfig)
 	if err != nil {
 		return err
 	}
 
 	klog.Infof("Creating status syncer")
-	statusSyncer, err := NewStatusSyncer(cfg.DownstreamConfig, cfg.UpstreamConfig)
+	statusSyncer, err := NewStatusSyncer(cfg.SyncerName, cfg.DownstreamConfig, cfg.UpstreamConfig)
 	if err != nil {
 		return err
 	}
@@ -60,12 +63,15 @@ func StartSyncer(ctx context.Context, cfg *SyncerConfig, numSyncerThreads int) e
 	return nil
 }
 
-type UpsertFunc func(ctx context.Context, gvr schema.GroupVersionResource, namespace string, unstrob *unstructured.Unstructured) error
-type DeleteFunc func(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error
+type (
+	UpsertFunc func(ctx context.Context, gvr schema.GroupVersionResource, namespace string, unstrob *unstructured.Unstructured) error
+	DeleteFunc func(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error
+)
 
 type Controller struct {
-	name  string
-	queue workqueue.RateLimitingInterface
+	name       string
+	queue      workqueue.RateLimitingInterface
+	syncerName string
 
 	fromInformers dynamicinformer.DynamicSharedInformerFactory
 	fromConfig    *rest.Config
@@ -79,7 +85,7 @@ type Controller struct {
 }
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
-func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direction SyncDirection) (*Controller, error) {
+func New(syncerName string, fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direction SyncDirection) (*Controller, error) {
 	controllerName := string(direction) + "--regional-hub-->global-hub"
 	if direction == SyncDown {
 		controllerName = string(direction) + "--global-hub-->regional-hub"
@@ -88,6 +94,7 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 
 	c := Controller{
 		name:       controllerName,
+		syncerName: syncerName,
 		queue:      queue,
 		toClient:   toClient,
 		fromConfig: fromConfig,
@@ -126,14 +133,22 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 		fromInformers.ForResource(*gvr).Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				shouldEnqueue := true
+				unstrob, ok := obj.(*unstructured.Unstructured)
+				if !ok {
+					shouldEnqueue = false
+				}
 				if c.direction == SyncUp {
 					// check the managedcluster CRD to make sure this is a hub controlplane
 					if gvr.Resource == "customresourcedefinitions" {
-						unstrob, ok := obj.(*unstructured.Unstructured)
-						if !ok {
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
 							shouldEnqueue = false
 						}
-						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+					}
+				} else {
+					// only process the resources in the global hub namespaces
+					if len(unstrob.GetNamespace()) > 0 {
+						originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
+						if !ok || originalNamespace != unstrob.GetNamespace() {
 							shouldEnqueue = false
 						}
 					}
@@ -145,14 +160,22 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				shouldEnqueue := true
+				unstrob, ok := newObj.(*unstructured.Unstructured)
+				if !ok {
+					shouldEnqueue = false
+				}
 				if c.direction == SyncUp {
 					// check the managedcluster CRD to make sure this is a hub controlplane
 					if gvr.Resource == "customresourcedefinitions" {
-						unstrob, ok := newObj.(*unstructured.Unstructured)
-						if !ok {
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
 							shouldEnqueue = false
 						}
-						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+					}
+				} else {
+					// only process the resources in the global hub namespaces
+					if len(unstrob.GetNamespace()) > 0 {
+						originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
+						if !ok || originalNamespace != unstrob.GetNamespace() {
 							shouldEnqueue = false
 						}
 					}
@@ -172,14 +195,22 @@ func New(fromClient, toClient dynamic.Interface, fromConfig *rest.Config, direct
 			},
 			DeleteFunc: func(obj interface{}) {
 				shouldEnqueue := true
+				unstrob, ok := obj.(*unstructured.Unstructured)
+				if !ok {
+					shouldEnqueue = false
+				}
 				if c.direction == SyncUp {
 					// check the managedcluster CRD to make sure this is a hub controlplane
 					if gvr.Resource == "customresourcedefinitions" {
-						unstrob, ok := obj.(*unstructured.Unstructured)
-						if !ok {
+						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
 							shouldEnqueue = false
 						}
-						if unstrob.GetName() != "managedclusters.cluster.open-cluster-management.io" {
+					}
+				} else {
+					// only process the resources in the global hub namespaces
+					if len(unstrob.GetNamespace()) > 0 {
+						originalNamespace, ok := unstrob.GetLabels()[GlobalHubPolicyNamespaceLabel]
+						if !ok || originalNamespace != unstrob.GetNamespace() {
 							shouldEnqueue = false
 						}
 					}

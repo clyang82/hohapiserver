@@ -45,7 +45,7 @@ func deepEqualApartFromStatus(oldObj, newObj interface{}) bool {
 
 const specSyncerAgent = "globalhub#spec-syncer/v0.0.0"
 
-func NewSpecSyncer(from, to *rest.Config) (*Controller, error) {
+func NewSpecSyncer(syncerName string, from, to *rest.Config) (*Controller, error) {
 	from = rest.CopyConfig(from)
 	from.UserAgent = specSyncerAgent
 	to = rest.CopyConfig(to)
@@ -54,16 +54,16 @@ func NewSpecSyncer(from, to *rest.Config) (*Controller, error) {
 	fromClient := dynamic.NewForConfigOrDie(from)
 	toClient := dynamic.NewForConfigOrDie(to)
 
-	return New(fromClient, toClient, from, SyncDown)
+	return New(syncerName, fromClient, toClient, from, SyncDown)
 }
 
 func (c *Controller) deleteFromDownstream(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error {
-
 	return c.toClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
 // TODO: This function is there as a quick and dirty implementation of namespace creation.
-//       In fact We should also be getting notifications about namespaces created upstream and be creating downstream equivalents.
+//
+//	In fact We should also be getting notifications about namespaces created upstream and be creating downstream equivalents.
 func (c *Controller) ensureDownstreamNamespaceExists(ctx context.Context, downstreamNamespace string, upstreamObj *unstructured.Unstructured) error {
 	namespaces := c.toClient.Resource(schema.GroupVersionResource{
 		Group:    "",

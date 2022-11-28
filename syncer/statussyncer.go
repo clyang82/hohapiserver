@@ -58,7 +58,7 @@ func deepEqualStatus(oldObj, newObj interface{}) bool {
 
 const statusSyncerAgent = "globalhub#status-syncer/v0.0.0"
 
-func NewStatusSyncer(from, to *rest.Config) (*Controller, error) {
+func NewStatusSyncer(syncerName string, from, to *rest.Config) (*Controller, error) {
 	from = rest.CopyConfig(from)
 	from.UserAgent = statusSyncerAgent
 	to = rest.CopyConfig(to)
@@ -67,7 +67,7 @@ func NewStatusSyncer(from, to *rest.Config) (*Controller, error) {
 	fromClient := dynamic.NewForConfigOrDie(from)
 	toClient := dynamic.NewForConfigOrDie(to)
 
-	return New(fromClient, toClient, from, SyncUp)
+	return New(syncerName, fromClient, toClient, from, SyncUp)
 }
 
 func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured) error {
@@ -87,31 +87,33 @@ func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.Grou
 	upstreamObj := downstreamObj.DeepCopy()
 	upstreamObj.SetUID("")
 	upstreamObj.SetResourceVersion("")
-	upstreamObj.SetNamespace(upstreamNamespace)
+	upstreamObj.SetNamespace(c.syncerName)
 
-	existing, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).Get(ctx, upstreamObj.GetName(), metav1.GetOptions{})
+	existing, err := c.toClient.Resource(gvr).Namespace(c.syncerName).Get(ctx, upstreamObj.GetName(), metav1.GetOptions{})
 	if err != nil {
 		if gvr.Resource == "managedclusters" && errors.IsNotFound(err) {
-			c.applyToUpstream(ctx, gvr, upstreamNamespace, downstreamObj)
+			c.applyToUpstream(ctx, gvr, c.syncerName, downstreamObj)
 			return nil
 		}
-		klog.Errorf("Getting resource %s/%s: %v", upstreamNamespace, upstreamObj.GetName(), err)
+		if errors.IsNotFound(err) {
+			return fmt.Errorf("should create instance %s: %s/%s in upstream", gvr.Resource, upstreamObj.GetNamespace(), upstreamObj.GetName())
+		}
+		klog.Errorf("Getting upstream resource %s/%s: %v", c.syncerName, upstreamObj.GetName(), err)
 		return err
 	}
 
 	upstreamObj.SetResourceVersion(existing.GetResourceVersion())
-	if _, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).UpdateStatus(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
-		klog.Errorf("Failed updating status of resource %s/%s from leaf hub cluster namespace %s: %v", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace(), err)
+	if _, err := c.toClient.Resource(gvr).Namespace(c.syncerName).UpdateStatus(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
+		klog.Errorf("Failed updating status of resource %s/%s from leaf hub cluster namespace %s: %v", c.syncerName, upstreamObj.GetName(), downstreamObj.GetNamespace(), err)
 		return err
 	}
-	klog.Infof("Updated status of resource %s/%s from leaf hub cluster namespace %s", upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace())
+	klog.Infof("Updated status of resource %s/%s from leaf hub cluster namespace %s", c.syncerName, upstreamObj.GetName(), downstreamObj.GetNamespace())
 
 	return nil
 }
 
 // applyToUpstream is used to apply managedclusters to upstream
 func (c *Controller) applyToUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured) error {
-
 	upstreamObj := downstreamObj.DeepCopy()
 	upstreamObj.SetUID("")
 	upstreamObj.SetResourceVersion("")
@@ -124,6 +126,7 @@ func (c *Controller) applyToUpstream(ctx context.Context, gvr schema.GroupVersio
 	upstreamObj.SetOwnerReferences(nil)
 	// Strip finalizers to avoid the deletion of the downstream resource from being blocked.
 	upstreamObj.SetFinalizers(nil)
+	upstreamObj.SetNamespace(c.syncerName)
 
 	// Marshalling the unstructured object is good enough as SSA patch
 	data, err := json.Marshal(upstreamObj)

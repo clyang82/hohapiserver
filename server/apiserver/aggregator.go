@@ -166,13 +166,14 @@ func createAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 		return nil, err
 	}
 
+	dynamicClient, err := dynamic.NewForConfig(aggregatorConfig.GenericConfig.LoopbackClientConfig)
+	if err != nil {
+		klog.Errorf("failed to create dynamic client: %v", err)
+	}
+
 	// Add PostStartHook to install global hub crds
 	err = aggregatorServer.GenericAPIServer.AddPostStartHook("global-hub-crds", func(context genericapiserver.PostStartHookContext) error {
 		go func() {
-			dynamicClient, err := dynamic.NewForConfig(aggregatorConfig.GenericConfig.LoopbackClientConfig)
-			if err != nil {
-				klog.Errorf("failed to create dynamic client: %v", err)
-			}
 			if err := globalhubcontroller.InstallGlobalHubCRDs(dynamicClient); err != nil {
 				klog.Errorf("failed to create global hub crds: %v", err)
 			}
@@ -180,6 +181,14 @@ func createAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 		return nil
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	// Add PostStartHook to install global hub controllers
+	if err := aggregatorServer.GenericAPIServer.AddPostStartHook("global-hub-controllers", func(context genericapiserver.PostStartHookContext) error {
+		globalhubcontroller.AddControllers(dynamicClient, context.StopCh)
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
