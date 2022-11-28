@@ -13,9 +13,6 @@ import (
 
 func main() {
 
-	// opts := server.NewOptions()
-	// opts.AddFlags(pflag.CommandLine)
-
 	s := options.NewServerRunOptions()
 	s.AddFlags(pflag.CommandLine)
 	flag.InitFlags()

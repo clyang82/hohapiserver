@@ -1,3 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
 namespace: default
 resources:
 - ./service_account.yaml
@@ -7,15 +10,20 @@ resources:
 - ./service.yaml
 - ./route.yaml
 
+images:
+- name: quay.io/clyang82/multicluster-global-hub-apiserver
+  newName: quay.io/clyang82/multicluster-global-hub-apiserver
+  newTag: latest
+
 secretGenerator:
 - name: global-hub-certs
   files:
-  - cert/kube-serviceaccount.key
-  - cert/client-ca.crt
-  - cert/client-ca.key
-  - cert/serving-kube-apiserver.crt
-  - cert/serving-kube-apiserver.key
-  - cert/kube-aggregator.kubeconfig
+  - certs/kube-serviceaccount.key
+  - certs/client-ca.crt
+  - certs/client-ca.key
+  - certs/serving-kube-apiserver.crt
+  - certs/serving-kube-apiserver.key
+  - certs/kube-aggregator.kubeconfig
 - name: global-hub-kubeconfig
   files:
-  - kubeconfig=cert/kube-aggregator.kubeconfig
+  - kubeconfig=certs/kube-aggregator.kubeconfig

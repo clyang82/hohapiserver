@@ -461,6 +461,16 @@ function generate_certs {
     kube::util::write_client_kubeconfig "${CONTROLPLANE_SUDO}" "${CERT_DIR}" "serving-kube-apiserver.crt" "${API_HOST}" "443" kube-aggregator
 }
 
+function set_service_accounts {
+    SERVICE_ACCOUNT_LOOKUP=${SERVICE_ACCOUNT_LOOKUP:-true}
+    SERVICE_ACCOUNT_KEY="${CERT_DIR}/kube-serviceaccount.key"
+    # Generate ServiceAccount key if needed
+    if [[ ! -f "${SERVICE_ACCOUNT_KEY}" ]]; then
+      mkdir -p "$(dirname "${SERVICE_ACCOUNT_KEY}")"
+      openssl genrsa -out "${SERVICE_ACCOUNT_KEY}" 2048 2>/dev/null
+    fi
+}
+
 kube::util::test_openssl_installed
 kube::util::ensure-cfssl
 # Ensure CERT_DIR is created for auto-generated crt/key and kubeconfig
@@ -474,7 +484,6 @@ KUSTOMIZE=kustomize
 
 # global hub namespace
 GLOBAL_HUB_NAMESPACE=${GLOBAL_HUB_NAMESPACE:-"default"}
-
 
 # this is needed for the global hub deploy
 echo "* Testing connection"
@@ -491,7 +500,9 @@ if [ ! $API_HOST_POSTFIX ] ; then
     echo "API_HOST_POSTFIX should be set"
     exit 1
 fi
-export API_HOST="multicluster-global-hub-apiserver-${HUB_NAME}.${API_HOST_POSTFIX}"
+export API_HOST="multicluster-global-hub-apiserver-${GLOBAL_HUB_NAMESPACE}.${API_HOST_POSTFIX}"
 API_HOST_IP=${API_HOST_IP:-"127.0.0.1"}
+FIRST_SERVICE_CLUSTER_IP=${FIRST_SERVICE_CLUSTER_IP:-10.0.0.1}
 
 generate_certs
+set_service_accounts

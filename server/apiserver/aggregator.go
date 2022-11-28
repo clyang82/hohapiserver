@@ -1,7 +1,6 @@
 package apiserver
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -168,13 +167,15 @@ func createAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 	}
 
 	// Add PostStartHook to install global hub crds
-	err = aggregatorServer.GenericAPIServer.AddPostStartHook("ocm-controlplane-registration-controllers", func(context genericapiserver.PostStartHookContext) error {
+	err = aggregatorServer.GenericAPIServer.AddPostStartHook("global-hub-crds", func(context genericapiserver.PostStartHookContext) error {
 		go func() {
 			dynamicClient, err := dynamic.NewForConfig(aggregatorConfig.GenericConfig.LoopbackClientConfig)
 			if err != nil {
 				klog.Errorf("failed to create dynamic client: %v", err)
 			}
-			globalhubcontroller.InstallGlobalHubCRDs(dynamicClient)
+			if err := globalhubcontroller.InstallGlobalHubCRDs(dynamicClient); err != nil {
+				klog.Errorf("failed to create global hub crds: %v", err)
+			}
 		}()
 		return nil
 	})
@@ -308,16 +309,4 @@ func apiServicesToRegister(delegateAPIServer genericapiserver.DelegationTarget, 
 	}
 
 	return apiServices
-}
-
-// goContext turns the PostStartHookContext into a context.Context for use in routines that may or may not
-// run inside of a post-start-hook. The k8s APIServer wrote the post-start-hook context code before contexts
-// were part of the Go stdlib.
-func goContext(parent genericapiserver.PostStartHookContext) context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-	go func(done <-chan struct{}) {
-		<-done
-		cancel()
-	}(parent.StopCh)
-	return ctx
 }

@@ -27,15 +27,14 @@ spec:
         - "--enable-priority-and-fairness=false"
         - "--api-audiences="    
         - "--storage-backend=etcd3"
-        - "--v=1"
         - "--service-account-lookup=false"
         - "--service-account-signing-key-file=/var/run/apiservice/certs/kube-serviceaccount.key"
-        - "--enable-admission-plugins=NamespaceLifecycle,ServiceAccount,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ManagedClusterMutating,ManagedClusterValidating,ManagedClusterSetBindingValidating"
+        - "--enable-admission-plugins=NamespaceLifecycle"
         - "--bind-address=0.0.0.0"
-        - "--secure-port=9443"
+        - "--secure-port=6443"
         - "--tls-cert-file=/var/run/apiservice/certs/serving-kube-apiserver.crt"
         - "--tls-private-key-file=/var/run/apiservice/certs/serving-kube-apiserver.key"
-        - "--feature-gates=DefaultClusterSet=true,OpenAPIV3=false"
+        - "--feature-gates=OpenAPIV3=false"
         - "--enable-embedded-etcd=true"
         - "--etcd-servers=https://127.0.0.1:2379"
         - "--service-cluster-ip-range=10.0.0.0/24"
@@ -43,7 +42,7 @@ spec:
         - "--external-hostname=API_HOST"
         env:
         name: multicluster-global-hub-apiserver
-        image: quay.io/clyang82/multicluster-global-hub-apiserver:latest
+        image: quay.io/clyang82/multicluster-global-hub-apiserver
         imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
