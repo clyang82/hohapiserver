@@ -6,3 +6,16 @@ resources:
 - ./deployment.yaml
 - ./service.yaml
 - ./route.yaml
+
+secretGenerator:
+- name: global-hub-certs
+  files:
+  - cert/kube-serviceaccount.key
+  - cert/client-ca.crt
+  - cert/client-ca.key
+  - cert/serving-kube-apiserver.crt
+  - cert/serving-kube-apiserver.key
+  - cert/kube-aggregator.kubeconfig
+- name: global-hub-kubeconfig
+  files:
+  - kubeconfig=cert/kube-aggregator.kubeconfig

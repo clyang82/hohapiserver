@@ -19,6 +19,13 @@ build:
 	CGO_ENABLED=0 go build -o bin/global-hub-apiserver ./cmd/server/main.go
 	CGO_ENABLED=0 go build -o bin/syncer ./cmd/syncer/main.go
 
+deploy:
+	cd ./deploy/server && source generate_certs.sh
+	cp ./deploy/server/deployment.yaml ./deploy/server/deployment.yaml.tmp
+	sed -e 's,API_HOST,'${API_HOST}',' ./deploy/server/deployment.yaml
+	${KUSTOMIZE} build ./deploy/server | ${KUBECTL} apply -f -
+	mv ./deploy/server/deployment.yaml.tmp ./deploy/server/deployment.yaml
+
 fix:
 	go fix ./...
 

@@ -18,9 +18,29 @@ spec:
       containers:
       - args:
         - "/global-hub-apiserver"
-        - "--secure-port=6443"
-        - "--tls-cert-file=/var/run/apiservice/tls.crt"
-        - "--tls-private-key-file=/var/run/apiservice/tls.key"
+        - "--authorization-mode=RBAC"
+        - "--enable-bootstrap-token-auth"
+        - "--service-account-key-file=/var/run/apiservice/certs/kube-serviceaccount.key"
+        - "--client-ca-file=/var/run/apiservice/certs/client-ca.crt"
+        - "--client-key-file=/var/run/apiservice/certs/client-ca.key"
+        - "--enable-bootstrap-token-auth"
+        - "--enable-priority-and-fairness=false"
+        - "--api-audiences="    
+        - "--storage-backend=etcd3"
+        - "--v=1"
+        - "--service-account-lookup=false"
+        - "--service-account-signing-key-file=/var/run/apiservice/certs/kube-serviceaccount.key"
+        - "--enable-admission-plugins=NamespaceLifecycle,ServiceAccount,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ManagedClusterMutating,ManagedClusterValidating,ManagedClusterSetBindingValidating"
+        - "--bind-address=0.0.0.0"
+        - "--secure-port=9443"
+        - "--tls-cert-file=/var/run/apiservice/certs/serving-kube-apiserver.crt"
+        - "--tls-private-key-file=/var/run/apiservice/certs/serving-kube-apiserver.key"
+        - "--feature-gates=DefaultClusterSet=true,OpenAPIV3=false"
+        - "--enable-embedded-etcd=true"
+        - "--etcd-servers=https://127.0.0.1:2379"
+        - "--service-cluster-ip-range=10.0.0.0/24"
+        - "--service-account-issuer=https://kubernetes.default.svc"
+        - "--external-hostname=API_HOST"
         env:
         name: multicluster-global-hub-apiserver
         image: quay.io/clyang82/multicluster-global-hub-apiserver:latest
@@ -33,10 +53,10 @@ spec:
           privileged: false
           runAsNonRoot: true
         volumeMounts:
-        - mountPath: /var/run/apiservice
+        - mountPath: /var/run/apiservice/certs
           name: apiservice-certs
       volumes:
       - name: apiservice-certs
         secret:
           defaultMode: 420
-          secretName: multicluster-global-hub-apiserver
+          secretName: global-hub-certs
