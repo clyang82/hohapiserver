@@ -9,10 +9,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/klog"
 	"sigs.k8s.io/yaml"
 )
 
-// go:embed manifests
+//go:embed manifests
 var crdManifestsFS embed.FS
 
 func InstallGlobalHubCRDs(dynamicClient dynamic.Interface) error {
@@ -22,6 +23,7 @@ func InstallGlobalHubCRDs(dynamicClient dynamic.Interface) error {
 		}
 
 		if !d.IsDir() {
+			klog.Infof("Installing CRD %s", file)
 			b, err := crdManifestsFS.ReadFile(file)
 			if err != nil {
 				return err
@@ -35,15 +37,6 @@ func InstallGlobalHubCRDs(dynamicClient dynamic.Interface) error {
 				Resource(apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions")).
 				Create(context.TODO(), obj, metav1.CreateOptions{})
 			if err != nil {
-				// we do not support to delete or update the crds
-				// if k8serrors.IsAlreadyExists(err) {
-				// 	_, err = dynamicClient.
-				// 		Resource(apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions")).
-				// 		Update(context.TODO(), obj, metav1.UpdateOptions{})
-				// 	if err != nil {
-				// 		return err
-				// 	}
-				// }
 				return err
 			}
 		}
