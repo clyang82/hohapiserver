@@ -24,6 +24,3 @@ secretGenerator:
   - certs/serving-kube-apiserver.crt
   - certs/serving-kube-apiserver.key
   - certs/kube-aggregator.kubeconfig
-- name: global-hub-kubeconfig
-  files:
-  - kubeconfig=certs/kube-aggregator.kubeconfig
