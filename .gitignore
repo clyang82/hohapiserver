@@ -28,3 +28,5 @@ bin/
 vendor
 
 .vscode
+
+deploy/server/certs

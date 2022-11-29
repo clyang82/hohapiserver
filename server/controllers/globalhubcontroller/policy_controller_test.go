@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 	// start testEnv
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join("..", "manifests"),
+			filepath.Join(".", "manifests"),
 		},
 	}
 	policyGVR = policyv1.SchemeGroupVersion.WithResource("policies")
@@ -65,11 +65,7 @@ func TestPolicySummary(t *testing.T) {
 	policyController := globalhubcontroller.NewPolicyController(client)
 	reconcileFunc := policyController.ReconcileFunc()
 
-	// 2. create namespace for global hub and syncer
-	if err := createNamespace(context.TODO(), "global-hub"); err != nil {
-		t.Fatal(fmt.Errorf("error to namespace global-hub: %w", err))
-	}
-	if err := createNamespace(context.TODO(), "syncer"); err != nil {
+	if err := createNamespace(context.TODO(), "hub1"); err != nil {
 		t.Fatal(fmt.Errorf("error to namespace syncer: %w", err))
 	}
 
@@ -121,33 +117,67 @@ func TestPolicySummary(t *testing.T) {
 		t.Errorf("should add global label to resource %s/%s", policy1.Namespace, policy1.Name)
 	}
 
-	// 4. reconcile global hub policy test-policy from syncer's policy
-	labeledPolicy.Status.Status = append(labeledPolicy.Status.Status, &policyv1.CompliancePerClusterStatus{
+	// 4. create syncerpolicy in hub1 namespace
+	syncerPolicy := &policyv1.Policy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Policy",
+			APIVersion: "policy.open-cluster-management.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-policy",
+			Namespace: "hub1", // global-hub
+			Labels: map[string]string{
+				globalhubcontroller.GlobalHubPolicyNamespaceLabel: "default", // global-hub
+			},
+		},
+		Spec: policyv1.PolicySpec{
+			Disabled:        true,
+			PolicyTemplates: make([]*policyv1.PolicyTemplate, 0),
+		},
+		Status: policyv1.PolicyStatus{
+			Status: make([]*policyv1.CompliancePerClusterStatus, 0),
+		},
+	}
+
+	unMap, err = runtime.DefaultUnstructuredConverter.ToUnstructured(syncerPolicy)
+	if err != nil {
+		t.Error(err)
+	}
+	unObj, err = client.Resource(policyGVR).Namespace("hub1").Create(context.TODO(), &unstructured.Unstructured{Object: unMap}, metav1.CreateOptions{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(unObj.UnstructuredContent(), syncerPolicy)
+	if err != nil {
+		t.Error(err)
+	}
+
+	syncerPolicy.Status.Status = append(syncerPolicy.Status.Status, &policyv1.CompliancePerClusterStatus{
 		ComplianceState:  policyv1.Compliant,
 		ClusterName:      "cluster1",
 		ClusterNamespace: "default",
 	})
-	labeledPolicy.Status.Status = append(labeledPolicy.Status.Status, &policyv1.CompliancePerClusterStatus{
+	syncerPolicy.Status.Status = append(syncerPolicy.Status.Status, &policyv1.CompliancePerClusterStatus{
 		ComplianceState:  policyv1.NonCompliant,
 		ClusterName:      "cluster2",
 		ClusterNamespace: "default",
 	})
 
-	unMap, err = runtime.DefaultUnstructuredConverter.ToUnstructured(labeledPolicy)
+	unMap, err = runtime.DefaultUnstructuredConverter.ToUnstructured(syncerPolicy)
 	if err != nil {
 		t.Error(err)
 	}
-	unObj, err = client.Resource(policyGVR).Namespace(labeledPolicy.Namespace).UpdateStatus(context.TODO(), &unstructured.Unstructured{Object: unMap}, metav1.UpdateOptions{})
+	unObj, err = client.Resource(policyGVR).Namespace(syncerPolicy.Namespace).UpdateStatus(context.TODO(), &unstructured.Unstructured{Object: unMap}, metav1.UpdateOptions{})
 	if err != nil {
 		t.Error(err)
 	}
 
-	// 3. reconcile policySummary
+	// 5. reconcile policySummary
 	if err := reconcileFunc(stopCh, unObj); err != nil {
 		t.Fatal(fmt.Errorf("error to reconcile policy: %w", err))
 	}
 
-	// 4. verify the reconcile policy
+	// 6. verify the reconcile policy
 	unObj, err = client.Resource(policyGVR).Namespace(policy1.Namespace).Get(context.TODO(), policy1.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(fmt.Errorf("error to get policy: %w", err))

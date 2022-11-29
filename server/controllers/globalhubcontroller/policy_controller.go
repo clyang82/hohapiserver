@@ -116,11 +116,6 @@ func (c *policyController) updateGlobalHubPolicy(stopCh <-chan struct{}, syncerP
 	if err != nil {
 		return err
 	}
-	// globalHubPolicy := &policyv1.Policy{}
-	// if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unStructObj.UnstructuredContent(), globalHubPolicy); err != nil {
-	// 	return err
-	// }
-
 	newClusterSummary := ClusterSummary{
 		Name:         syncerPolicy.GetNamespace(), // syncer identity
 		Compliant:    0,
@@ -138,12 +133,18 @@ func (c *policyController) updateGlobalHubPolicy(stopCh <-chan struct{}, syncerP
 		}
 	}
 
-	policyStatusMap := globalObj.Object["status"].(map[string]interface{})
+	policyStatusMap := make(map[string]interface{})
+	if globalObj.Object["status"] != nil {
+		policyStatusMap = globalObj.Object["status"].(map[string]interface{})
+	} else {
+		globalObj.Object["status"] = policyStatusMap
+	}
+
+	policyComplianceSummary := ComplianceSummary{}
 	policyComplianceSummaryJson, err := json.Marshal(policyStatusMap["complianceSummary"])
 	if err != nil {
 		return err
 	}
-	policyComplianceSummary := ComplianceSummary{}
 	if err := json.Unmarshal(policyComplianceSummaryJson, &policyComplianceSummary); err != nil {
 		return err
 	}

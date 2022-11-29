@@ -1,5 +1,7 @@
+namespace: hub1
 resources:
 - ./service_account.yaml
 - ./clusterrole_binding.yaml
 - ./clusterrole.yaml
 - ./deployment.yaml
+

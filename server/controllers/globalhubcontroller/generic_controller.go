@@ -116,7 +116,7 @@ func (c *GenericController) processNextWorkItem() bool {
 func (c *GenericController) process(key string) error {
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
-		klog.Errorf("invalid key: %q: %w", key, err)
+		klog.Errorf("invalid key: %q: %v", key, err)
 		return nil
 	}
 
@@ -132,12 +132,12 @@ func (c *GenericController) process(key string) error {
 		return nil
 	}
 	if err != nil {
-		klog.Errorf("get object(%s/%s) error %w", namespace, name, err)
+		klog.Errorf("get object(%s/%s) error %v", namespace, name, err)
 		return nil
 	}
 
 	if err != c.reconcile(c.stopCh, item) {
-		klog.Errorf("reconcile object(%s/%s) error %w", namespace, name, err)
+		klog.Errorf("reconcile object(%s/%s) error %v", namespace, name, err)
 		return err
 	}
 	return nil
