@@ -18,6 +18,7 @@ spec:
       containers:
       - args:
         - "/syncer"
+        - "--pod-namespace=$(POD_NAMESPACE)"
         - "--from-kubeconfig=/multicluster-global-hub-config/kubeconfig"
         - "--to-kubeconfig=/multicluster-global-hub-syncer-config/kubeconfig"
         env:

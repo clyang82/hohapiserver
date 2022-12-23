@@ -7,8 +7,13 @@ REGISTRY ?= quay.io/clyang82
 IMAGE_TAG ?= latest
 KUBECTL ?= oc
 KUSTOMIZE ?= kustomize
+TMP_BIN ?= /tmp/cr-tests-bin
+GO_TEST ?= go test -v
 
 all: fix fmt vet lint test tidy build
+
+unit-tests-server: setup_envtest
+	KUBEBUILDER_ASSETS="$(shell ${TMP_BIN}/setup-envtest use --use-env -p path)" ${GO_TEST} `go list ./server/... | grep -v test`
 
 docker:
 	docker build ./ --tag ${REGISTRY}/multicluster-global-hub-apiserver:${IMAGE_TAG}

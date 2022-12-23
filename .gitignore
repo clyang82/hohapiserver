@@ -26,3 +26,7 @@ etcd-socket*
 # binary builds
 bin/
 vendor
+
+.vscode
+
+deploy/server/certs

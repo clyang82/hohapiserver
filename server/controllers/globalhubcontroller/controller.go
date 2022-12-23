@@ -1,45 +1,41 @@
 package globalhubcontroller
 
 import (
-	"context"
-	"embed"
-	"io/fs"
+	"fmt"
+	"time"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/klog"
-	"sigs.k8s.io/yaml"
+	"k8s.io/client-go/dynamic/dynamicinformer"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-//go:embed manifests
-var crdManifestsFS embed.FS
+type IController interface {
+	GetName() string
+	GetGVR() schema.GroupVersionResource
+	CreateInstanceFunc() func() client.Object
+	ReconcileFunc() func(stopCh <-chan struct{}, obj interface{}) error
+}
 
-func InstallGlobalHubCRDs(dynamicClient dynamic.Interface) error {
-	return fs.WalkDir(crdManifestsFS, "manifests", func(file string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+func AddControllers(dynamicClient dynamic.Interface, stopChan <-chan struct{}) {
+	informerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(dynamicClient, 10*time.Hour, metav1.NamespaceAll,
+		func(o *metav1.ListOptions) {
+			o.LabelSelector = fmt.Sprintf("!%s", "multicluster-global-hub.open-cluster-management.io/local-resource")
+		})
 
-		if !d.IsDir() {
-			klog.Infof("Installing CRD %s", file)
-			b, err := crdManifestsFS.ReadFile(file)
-			if err != nil {
-				return err
-			}
-			obj := &unstructured.Unstructured{}
-			err = yaml.Unmarshal(b, &obj)
-			if err != nil {
-				return err
-			}
-			_, err = dynamicClient.
-				Resource(apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions")).
-				Create(context.TODO(), obj, metav1.CreateOptions{})
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	controllers := []IController{
+		NewPolicyController(dynamicClient),
+		NewPlacementBindingController(dynamicClient),
+		NewPlacementRuleController(dynamicClient),
+	}
+
+	genericControllers := []IGenericController{}
+	for _, c := range controllers {
+		genericControllers = append(genericControllers, NewGenericController(stopChan, dynamicClient, informerFactory, c))
+	}
+
+	for _, c := range genericControllers {
+		go c.Run(1)
+	}
 }
